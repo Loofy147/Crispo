@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Multi-Layer Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+        
+        .architecture {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            margin: 30px 0;
+        }
+        
+        .phase {
+            border: 3px solid #e0e0e0;
+            border-radius: 15px;
+            padding: 25px;
+            background: linear-gradient(to right, #f8f9fa, #ffffff);
+            transition: all 0.3s ease;
+        }
+        
+        .phase:hover {
+            transform: translateX(5px);
+            box-shadow: -5px 5px 20px rgba(102, 126, 234, 0.2);
+        }
+        
+        .phase-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .phase-number {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.5em;
+            color: white;
+        }
+        
+        .phase-1 .phase-number { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .phase-2 .phase-number { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .phase-3 .phase-number { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        
+        .phase-title {
+            font-size: 1.8em;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .phase-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .component {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .component:hover {
+            border-color: #667eea;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+        }
+        
+        .component-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        
+        .component-desc {
+            color: #666;
+            line-height: 1.6;
+            font-size: 0.95em;
+        }
+        
+        .flow-diagram {
+            margin: 40px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            border-radius: 15px;
+            border: 2px dashed #667eea;
+        }
+        
+        .flow-title {
+            text-align: center;
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+        
+        .flow-steps {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .flow-step {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            border: 2px solid #667eea;
+            font-weight: 500;
+            color: #333;
+            position: relative;
+            min-width: 200px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .flow-step:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .flow-arrow {
+            font-size: 2em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .key-features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+        
+        .feature-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .feature-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+        
+        .feature-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .feature-desc {
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        
+        .code-example {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        
+        .code-comment { color: #6a9955; }
+        .code-keyword { color: #569cd6; }
+        .code-string { color: #ce9178; }
+        .code-number { color: #b5cea8; }
+        
+        @media (max-width: 768px) {
+            .phase-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .flow-steps {
+                flex-direction: column;
+            }
+            
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Adaptive Multi-Layer Script System</h1>
+        <p class="subtitle">Integrating Reinforcement Learning, Genetic Algorithms & Attention Mechanisms</p>
+        
+        <div class="architecture">
+            <!-- Phase 1: Genetic Algorithms -->
+            <div class="phase phase-1">
+                <div class="phase-header">
+                    <div class="phase-number">1</div>
+                    <div class="phase-title">🧬 Genetic Algorithm Layer</div>
+                </div>
+                <p style="color: #666; margin-bottom: 20px;">
+                    <strong>Purpose:</strong> Evolve optimal layer configurations through natural selection
+                </p>
+                
+                <div class="phase-content">
+                    <div class="component">
+                        <div class="component-title">Population Initialization</div>
+                        <div class="component-desc">
+                            Creates diverse population of layer configurations with randomized weights, biases, and temperatures
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Fitness Evaluation</div>
+                        <div class="component-desc">
+                            Scores each configuration based on code quality, weight balance, and context alignment
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Selection & Crossover</div>
+                        <div class="component-desc">
+                            Tournament selection picks best parents; single-point crossover combines their genetic material
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Mutation & Elitism</div>
+                        <div class="component-desc">
+                            Random mutations introduce variation; elitism preserves best individual across generations
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="code-example">
+<span class="code-comment"># Genetic Algorithm in Action</span>
+<span class="code-keyword">for</span> generation <span class="code-keyword">in</span> range(generations):
+    fitness_scores = [evaluate_fitness(individual) <span class="code-keyword">for</span> individual <span class="code-keyword">in</span> population]
+    parents = tournament_selection(population, fitness_scores)
+    offspring = [crossover(p1, p2) <span class="code-keyword">for</span> p1, p2 <span class="code-keyword">in</span> pairs(parents)]
+    offspring = [mutate(child) <span class="code-keyword">for</span> child <span class="code-keyword">in</span> offspring]
+    population = elitism(population, offspring, fitness_scores)
+                </div>
+            </div>
+            
+            <!-- Phase 2: Reinforcement Learning -->
+            <div class="phase phase-2">
+                <div class="phase-header">
+                    <div class="phase-number">2</div>
+                    <div class="phase-title">🎯 Reinforcement Learning Layer</div>
+                </div>
+                <p style="color: #666; margin-bottom: 20px;">
+                    <strong>Purpose:</strong> Fine-tune parameters through trial-and-error learning with rewards
+                </p>
+                
+                <div class="phase-content">
+                    <div class="component">
+                        <div class="component-title">State Representation</div>
+                        <div class="component-desc">
+                            Encodes layer context, previous rewards, and code metrics into feature vectors for decision-making
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Q-Learning Agent</div>
+                        <div class="component-desc">
+                            Maintains Q-table mapping states to action values; uses epsilon-greedy for exploration vs exploitation
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Action Selection</div>
+                        <div class="component-desc">
+                            Chooses parameter adjustments (weight deltas, bias changes, temperature shifts) based on learned policy
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Reward Function</div>
+                        <div class="component-desc">
+                            Rewards code quality, appropriate length, and structural correctness; penalizes poor generation
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="code-example">
+<span class="code-comment"># Q-Learning Update Rule</span>
+Q(s, a) = Q(s, a) + α * [R + γ * max(Q(s', a')) - Q(s, a)]
+
+<span class="code-comment"># Where:</span>
+<span class="code-comment"># α = learning rate (0.1)</span>
+<span class="code-comment"># γ = discount factor (0.95)</span>
+<span class="code-comment"># R = immediate reward</span>
+<span class="code-comment"># s' = next state</span>
+                </div>
+            </div>
+            
+            <!-- Phase 3: Attention Mechanisms -->
+            <div class="phase phase-3">
+                <div class="phase-header">
+                    <div class="phase-number">3</div>
+                    <div class="phase-title">🧠 Attention Mechanism Layer</div>
+                </div>
+                <p style="color: #666; margin-bottom: 20px;">
+                    <strong>Purpose:</strong> Enable layers to dynamically attend to relevant information from previous layers
+                </p>
+                
+                <div class="phase-content">
+                    <div class="component">
+                        <div class="component-title">Multi-Head Attention</div>
+                        <div class="component-desc">
+                            4 parallel attention heads learn different aspects of layer relationships and information flow
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Query-Key-Value</div>
+                        <div class="component-desc">
+                            Current layer generates queries; previous layers provide keys and values for attention computation
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Scaled Dot-Product</div>
+                        <div class="component-desc">
+                            Computes attention scores via dot product of queries and keys, scaled by embedding dimension
+                        </div>
+                    </div>
+                    
+                    <div class="component">
+                        <div class="component-title">Weighted Aggregation</div>
+                        <div class="component-desc">
+                            Softmax-normalized attention weights combine previous layer embeddings into context-aware representation
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="code-example">
+<span class="code-comment"># Attention Computation</span>
+scores = [dot(query, key) / sqrt(dim) <span class="code-keyword">for</span> key <span class="code-keyword">in</span> keys]
+attention_weights = softmax(scores)
+output = sum(weight * value <span class="code-keyword">for</span> weight, value <span class="code-keyword">in</span> zip(attention_weights, values))
+
+<span class="code-comment"># Multi-head combines different perspectives</span>
+heads = [attention_head_i(Q, K, V) <span class="code-keyword">for</span> i <span class="code-keyword">in</span> range(num_heads)]
+multi_head_output = concat(heads)
+                </div>
+            </div>
+        </div>
+        
+        <div class="flow-diagram">
+            <div class="flow-title">🔄 Complete Pipeline Flow</div>
+            <div class="flow-steps">
+                <div class="flow-step">
+                    <strong>Initialize</strong><br>
+                    Random Parameters
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <strong>GA Evolution</strong><br>
+                    Optimize Structure
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <strong>RL Fine-Tuning</strong><br>
+                    Learn from Rewards
+                </div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-step">
+                    <strong>Attention Generation</strong><br>
+                    Context-Aware Output
+                </div>
+            </div>
+        </div>
+        
+        <div class="key-features">
+            <div class="feature-card">
+                <div class="feature-icon">🔬</div>
+                <div class="feature-title">Evolutionary Optimization</div>
+                <div class="feature-desc">
+                    GA explores configuration space efficiently, finding globally optimal layer parameters through selection pressure and genetic diversity
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <div class="feature-title">Adaptive Learning</div>
+                <div class="feature-desc">
+                    RL agent learns from experience, adjusting parameters based on code quality rewards and building optimal generation policies over time
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">🎯</div>
+                <div class="feature-title">Contextual Awareness</div>
+                <div class="feature-desc">
+                    Attention mechanisms enable each layer to focus on relevant information from previous layers, creating coherent multi-layer narratives
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 40px; padding: 30px; background: #f8f9fa; border-radius: 15px; border-left: 5px solid #667eea;">
+            <h3 style="color: #667eea; margin-bottom: 15px;">💡 Why This Architecture Works</h3>
+            <div style="color: #666; line-height: 1.8;">
+                <p style="margin-bottom: 15px;">
+                    <strong>1. Genetic Algorithms (Strategic Layer):</strong> Operates at the macro level, discovering high-quality architectural patterns and parameter ranges through evolutionary search. Perfect for initial exploration.
+                </p>
+                <p style="margin-bottom: 15px;">
+                    <strong>2. Reinforcement Learning (Tactical Layer):</strong> Fine-tunes parameters through experience, learning which small adjustments improve code quality. Excels at local optimization and adaptation.
+                </p>
+                <p>
+                    <strong>3. Attention Mechanisms (Coordination Layer):</strong> Enables intelligent information flow between layers, ensuring generated code maintains coherence and context across the generation hierarchy.
+                </p>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: center; color: #999; font-size: 0.9em;">
+            Each component operates at its optimal level: GA for exploration, RL for exploitation, Attention for coordination
+        </div>
+    </div>
+</body>
+</html>
