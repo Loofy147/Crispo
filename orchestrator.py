@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 OrchestratorAI: Autonomous Multi-Layer Script Orchestration System
 Integrates GA + RL + Attention with recursive self-improvement
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field, asdict
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
+import argparse
 
 # ============================================================================
 # ORCHESTRATION CORE
@@ -435,7 +437,7 @@ class OrchestratorAI:
             )
             self.units[name] = unit
 
-    def orchestrate(self) -> Dict:
+    def orchestrate(self, generations: int = 10, episodes: int = 5) -> Dict:
         """Execute full orchestration pipeline"""
         print("\n" + "🚀 " + "="*68)
         print("ORCHESTRATOR AI: AUTONOMOUS EXECUTION")
@@ -452,7 +454,7 @@ class OrchestratorAI:
         ga_result = ga_optimizer.execute(
             params_template={'weights': {'complexity': 1.0, 'execution': 1.0},
                            'biases': {'logging': 0.0}, 'temperature': 1.0},
-            context={'generations': 10, 'desired_complexity': 0.9}
+            context={'generations': generations, 'desired_complexity': 0.9}
         )
         results['ga_optimization'] = ga_result
         self.units['GA_Optimizer'].status = "completed"
@@ -463,7 +465,7 @@ class OrchestratorAI:
         rl_agent = RLAgent()
         rl_result = rl_agent.execute(
             initial_params=ga_result['optimized_params'],
-            context={'episodes': 5, 'complexity': 0.8}
+            context={'episodes': episodes, 'complexity': 0.8}
         )
         results['rl_optimization'] = rl_result
         self.units['RL_Agent'].status = "completed"
@@ -542,29 +544,46 @@ def process_layer_{layer_id}(data):
         return {'status': 'Optimization cycle complete'}
 
 # ============================================================================
-# DEMO
+# COMMAND-LINE INTERFACE
 # ============================================================================
 
-if __name__ == "__main__":
+def main():
+    """Main function to run the orchestrator from the command line."""
+    parser = argparse.ArgumentParser(description="OrchestratorAI: Autonomous Multi-Layer Script Orchestration System")
+    parser.add_argument("--project", type=str, default="AutoCode_Genesis", help="Project name for the orchestration context.")
+    parser.add_argument("--objective", type=str, default="Generate a self-optimizing multi-layer data processing script", help="The main objective for the script generation.")
+    parser.add_argument("--generations", type=int, default=10, help="Number of generations for the Genetic Algorithm.")
+    parser.add_argument("--episodes", type=int, default=5, help="Number of episodes for the Reinforcement Learning agent.")
+
+    args = parser.parse_args()
+
     context = OrchestrationContext(
-        project="AutoCode_Genesis",
-        objective="Generate a self-optimizing multi-layer data processing script"
+        project=args.project,
+        objective=args.objective
     )
 
     orchestrator = OrchestratorAI(context)
-    final_results = orchestrator.orchestrate()
+    # Pass generations and episodes to the orchestrate method
+    final_results = orchestrator.orchestrate(generations=args.generations, episodes=args.episodes)
 
     print("\n" + "="*70)
     print("ORCHESTRATION COMPLETE")
     print("="*70)
 
     # Print final generated code
-    for i, code in enumerate(final_results['code_generation']['generated_scripts']):
-        print(f"\n--- Layer {i} ---")
-        print(code)
+    if 'code_generation' in final_results and 'generated_scripts' in final_results['code_generation']:
+        for i, code in enumerate(final_results['code_generation']['generated_scripts']):
+            print(f"\n--- Layer {i} ---")
+            print(code)
 
     print("\n" + "="*70)
-    print("Final GA Fitness:", final_results['ga_optimization']['final_fitness'])
-    print("Final RL Reward:", final_results['rl_optimization']['final_reward'])
-    print("Final Attention Entropy:", final_results['attention_routing']['attention_entropy'])
+    if 'ga_optimization' in final_results:
+        print("Final GA Fitness:", final_results['ga_optimization']['final_fitness'])
+    if 'rl_optimization' in final_results:
+        print("Final RL Reward:", final_results['rl_optimization']['final_reward'])
+    if 'attention_routing' in final_results:
+        print("Final Attention Entropy:", final_results['attention_routing']['attention_entropy'])
     print("="*70)
+
+if __name__ == "__main__":
+    main()
