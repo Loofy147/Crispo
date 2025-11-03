@@ -437,21 +437,26 @@ class GeneticOptimizer:
             
             # Selection
             parents = self.select_parents(population, fitness_scores)
-            
-            # Crossover
-            offspring = []
-            for i in range(0, len(parents) - 1, 2):
-                child1, child2 = self.crossover(parents[i], parents[i + 1])
-                offspring.extend([child1, child2])
-            
-            # Mutation
-            offspring = [self.mutate(child) for child in offspring]
-            
-            # Elitism - keep best individual
-            best_idx = fitness_scores.index(max(fitness_scores))
-            offspring[0] = population[best_idx]
-            
-            population = offspring
+
+            # Crossover & Mutation to create a new generation
+            next_generation = []
+
+            # Elitism: Keep the best individual from the current population
+            if fitness_scores:
+                best_idx = fitness_scores.index(max(fitness_scores))
+                next_generation.append(population[best_idx].clone())
+
+            # Fill the rest of the generation with new offspring
+            while len(next_generation) < self.population_size:
+                if len(parents) < 2:
+                    parents.append(population[best_idx].clone()) # Ensure enough parents
+                p1, p2 = random.sample(parents, 2)
+                child1, child2 = self.crossover(p1, p2)
+                next_generation.append(self.mutate(child1))
+                if len(next_generation) < self.population_size:
+                    next_generation.append(self.mutate(child2))
+
+            population = next_generation[:self.population_size]
         
         # Return best individual
         final_fitness = [self.evaluate_fitness(ind, test_context) for ind in population]
