@@ -21,6 +21,26 @@ from crispo import Crispo, OrchestrationContext
 from advanced_crispo import (
     FederatedOptimizer
 )
+from predictor_evaluator import PredictorEvaluator
+
+class TestPredictorEvaluator(unittest.TestCase):
+    """Tests for the PredictorEvaluator component."""
+
+    def test_uq_calibration(self):
+        """Test the UQ calibration evaluation."""
+        class MockTimeSeriesPredictor:
+            def predict_interval(self, steps=1):
+                # Always predict a fixed interval for testing
+                return [10, 20]
+
+        evaluator = PredictorEvaluator()
+        predictor = MockTimeSeriesPredictor()
+        # Test data: two values are inside the [10, 20] interval, one is outside.
+        test_data = [(0, 15), (1, 25), (2, 18)]
+
+        metrics = evaluator.evaluate_uq_calibration(predictor, test_data)
+        self.assertAlmostEqual(metrics['coverage_rate'], 2/3)
+        self.assertAlmostEqual(metrics['interval_sharpness'], 10.0)
 
 class TestAdvancedFeatures(unittest.TestCase):
     """Tests for the advanced features in advanced_orchestrator.py."""
@@ -197,15 +217,25 @@ class TestMetaLearner(unittest.TestCase):
             optimal_config={'ga_generations': 5, 'rl_episodes': 3}, # high_speed
             timestamp=""
         )
+        self.task3 = TaskMetadata(
+            task_id="3",
+            project_type="data_pipeline",
+            complexity_level=0.6,
+            domain="data_engineering",
+            success_metrics={'overall_quality': 0.5},
+            optimal_config={'ga_generations': 15, 'rl_episodes': 6}, # balanced
+            timestamp=""
+        )
 
     def test_exploitation(self):
         """Test that the MetaLearner exploits the best strategy when epsilon is 0."""
-        # With epsilon = 0.0, it should always exploit
+        # With epsilon = 0.0, it should use UCB1 for exploitation
         ml = MetaLearner(epsilon=0.0)
         ml.record_task(self.task1)
         ml.record_task(self.task2)
+        ml.record_task(self.task3)
 
-        # The best strategy is 'high_quality'
+        # After one pull of each strategy, UCB1 should select the one with the highest reward
         strategy = ml.get_optimal_strategy("data_pipeline", 0.8)
         self.assertEqual(strategy['ga_generations'], 20) # 25 * 0.8
 
@@ -348,9 +378,13 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
     def test_ski_rental_laa_pipeline(self):
         """Test the end-to-end pipeline for generating and evaluating a ski rental LAA."""
         import os
-        # Create dummy historical data for the predictor
+        import random
+        # Create dummy historical data with some noise for the predictor
         with open("ski_rental_history.csv", "w") as f:
-            f.write("value\n10\n20\n15\n25\n30\n")
+            f.write("value\n")
+            # Generate a slightly more realistic, non-linear series
+            values = [15 + i + random.randint(-3, 3) for i in range(15)]
+            f.write("\n".join(map(str, values)))
 
         context = OrchestrationContext(
             project="SkiRentalLAA",
@@ -372,12 +406,14 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         # Should generate a solution package of two scripts
         self.assertEqual(len(final_scripts), 2)
         self.assertIn("def ski_rental_algorithm", final_scripts[0])
-        self.assertIn("def train_and_predict", final_scripts[1])
+        self.assertIn("class Predictor", final_scripts[1])
 
-        # Check that the meta learner recorded the LAA metrics
+        # Check that the meta learner recorded the LAA and predictor metrics
         self.assertEqual(len(meta_learner.task_history), 1)
         task_record = meta_learner.task_history[0]
         self.assertIn('competitive_ratio', task_record.success_metrics)
+        self.assertIn('coverage_rate', task_record.success_metrics)
+        self.assertIn('interval_sharpness', task_record.success_metrics)
         self.assertGreater(task_record.success_metrics['competitive_ratio'], 0)
 
         # Clean up generated artifacts
