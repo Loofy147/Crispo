@@ -510,6 +510,13 @@ class Verifier:
         """
         metrics = {'syntax_ok': 0.0, 'runtime_ok': 0.0, 'overall_quality': 0.0}
 
+        # 1. Check for syntax errors first
+        try:
+            compile(script_code, '<string>', 'exec')
+            metrics['syntax_ok'] = 1.0
+        except SyntaxError:
+            return metrics  # No point in trying to run if syntax is wrong
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
             temp_file.write(script_code)
             temp_filename = temp_file.name
@@ -523,14 +530,9 @@ class Verifier:
                 timeout=10 # Add a timeout to prevent long-running scripts
             )
 
-            # A non-zero return code indicates an error
+            # A non-zero return code indicates a runtime error
             if result.returncode == 0:
-                metrics['syntax_ok'] = 1.0
                 metrics['runtime_ok'] = 1.0
-            else:
-                # The script ran but exited with an error
-                metrics['syntax_ok'] = 1.0
-                metrics['runtime_ok'] = 0.0
 
         except FileNotFoundError:
             # This can happen if the python3 interpreter is not found
