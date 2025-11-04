@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import sys
 import resource
+from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
@@ -151,7 +152,7 @@ class GAOptimizer:
         population = self._initialize_population(template_params)
 
         for gen in range(generations):
-            fitness_scores = [self._evaluate_fitness(ind, context) for ind in population]
+            fitness_scores = self._evaluate_population_parallel(population, context)
 
             print(f"  [GA] Gen {gen + 1}: Best Fitness={max(fitness_scores):.3f}, Avg Fitness={sum(fitness_scores)/len(fitness_scores):.3f}")
 
@@ -182,9 +183,25 @@ class GAOptimizer:
             population = new_population[:self.population_size]
 
 
-        final_fitness = [self._evaluate_fitness(ind, context) for ind in population]
+        final_fitness = self._evaluate_population_parallel(population, context)
         best_idx = final_fitness.index(max(final_fitness))
         return population[best_idx]
+
+    def _evaluate_population_parallel(self, population: List[LayerParameters], context: Dict) -> List[float]:
+        """
+        Evaluates the fitness of a population in parallel using a process pool.
+        """
+        with ProcessPoolExecutor(max_workers=4) as executor:
+            # Create a list of tuples, where each tuple is the arguments for one call
+            # to _evaluate_fitness. This is necessary because executor.map only
+            # works with functions that take a single argument.
+            args = [(ind, context) for ind in population]
+            fitness_scores = list(executor.map(self._evaluate_fitness_unpack, args))
+        return fitness_scores
+
+    def _evaluate_fitness_unpack(self, args: Tuple[LayerParameters, Dict]) -> float:
+        """Helper function to unpack arguments for parallel execution."""
+        return self._evaluate_fitness(*args)
 
     def _initialize_population(self, template: LayerParameters) -> List[LayerParameters]:
         """Creates an initial population of LayerParameters.
@@ -701,7 +718,7 @@ if __name__ == "__main__":
 '''
 
     def _generate_predictor_template(self) -> str:
-        """Generates a script for a time-series predictor."""
+        """Generates a class-based script for a time-series predictor."""
         return '''"""
 Time-Series Predictor for Learning-Augmented Algorithms
 """
@@ -710,51 +727,61 @@ import json
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
 
-def train_and_predict(historical_data_path: str):
-    """
-    Trains a simple ARIMA model and outputs a UQ prediction interval.
+class Predictor:
+    def __init__(self, historical_data_path: str):
+        self.historical_data_path = historical_data_path
+        self.model = self._train()
 
-    Args:
-        historical_data_path (str): Path to a CSV with a 'value' column.
+    def _train(self):
+        """Trains a simple ARIMA model."""
+        try:
+            data = pd.read_csv(self.historical_data_path)
+            series = data['value']
+            model = ARIMA(series, order=(5, 1, 0))
+            return model.fit()
+        except Exception as e:
+            print(f"Predictor training failed: {e}", file=sys.stderr)
+            return None
 
-    Returns:
-        List[int]: A [lower_bound, upper_bound] prediction interval.
-    """
-    try:
-        data = pd.read_csv(historical_data_path)
-        series = data['value']
+    def predict_interval(self, steps: int = 1):
+        """
+        Outputs a UQ prediction interval for a number of future steps.
 
-        # A simple ARIMA model
-        model = ARIMA(series, order=(5,1,0))
-        model_fit = model.fit()
+        Args:
+            steps (int): The number of future steps to predict.
 
-        # Forecast one step ahead
-        forecast = model_fit.get_forecast(steps=1)
-        pred_mean = forecast.predicted_mean.iloc[0]
-        pred_ci = forecast.conf_int().iloc[0]
+        Returns:
+            List[int]: A [lower_bound, upper_bound] prediction interval.
+        """
+        if not self.model:
+            # Fallback on training failure
+            return [10, 20]
 
-        lower_bound = int(pred_ci[0])
-        upper_bound = int(pred_ci[1])
+        try:
+            forecast = self.model.get_forecast(steps=steps)
+            pred_ci = forecast.conf_int().iloc[-1] # Get the last CI for multi-step
 
-        # Ensure bounds are reasonable
-        lower_bound = max(1, lower_bound)
-        upper_bound = max(lower_bound, upper_bound)
+            lower_bound = int(pred_ci[0])
+            upper_bound = int(pred_ci[1])
 
-        return [lower_bound, upper_bound]
+            # Ensure bounds are reasonable
+            lower_bound = max(1, lower_bound)
+            upper_bound = max(lower_bound, upper_bound)
 
-    except Exception as e:
-        # Fallback on failure
-        print(f"Predictor failed: {e}", file=sys.stderr)
-        return [10, 20] # Return a safe, wide interval
+            return [lower_bound, upper_bound]
+        except Exception as e:
+            print(f"Predictor prediction failed: {e}", file=sys.stderr)
+            return [10, 20] # Fallback
 
 def main():
-    """Main execution function."""
+    """Main execution function for command-line use."""
     if len(sys.argv) != 2:
         print("Usage: python predictor.py <historical_data_path>")
         sys.exit(1)
 
     historical_data_path = sys.argv[1]
-    prediction_interval = train_and_predict(historical_data_path)
+    predictor = Predictor(historical_data_path)
+    prediction_interval = predictor.predict_interval()
     print(json.dumps(prediction_interval))
 
 if __name__ == "__main__":
@@ -993,45 +1020,54 @@ class MetaLearner:
         )
 
     def get_optimal_strategy(self, project_type: str, complexity: float) -> Dict[str, Any]:
-        """Selects a strategy for a new task using an epsilon-greedy approach.
-
-        With probability epsilon, it will explore a random strategy. Otherwise,
-        it will exploit the strategy with the best historical performance for
-        the given project type.
-
-        Args:
-            project_type (str): The type of the project (e.g., 'data_pipeline')
-                for which to select a strategy.
-            complexity (float): The complexity of the project, used to scale
-                strategy parameters.
-
-        Returns:
-            Dict[str, Any]: A dictionary defining the selected strategy's
-                parameters (e.g., {'ga_generations': 10, 'rl_episodes': 5}).
         """
-        # 1. Decide whether to explore or exploit
-        if random.random() < self.epsilon:
-            print("  [MetaLearner] Exploring a random strategy.")
-            strategy_name = random.choice(self.available_strategies)
-            return self._decode_strategy(strategy_name, complexity)
-
-        # 2. If exploiting, check for existing knowledge
+        Selects an optimal strategy using the UCB1 algorithm to balance
+        exploration and exploitation.
+        """
+        # If there's no history for this project type, use the default strategy.
         if project_type not in self.strategy_performance:
             print("  [MetaLearner] No history for project type, using default strategy.")
             return self._default_strategy(complexity)
 
-        # 3. Exploit the best-known strategy
-        print("  [MetaLearner] Exploiting the best-known strategy.")
-        best_strategy = "balanced"
-        best_performance = float('-inf')
+        # With a low probability, explore a random strategy anyway
+        if random.random() < self.epsilon:
+            print("  [MetaLearner] Exploring a random strategy (epsilon-triggered).")
+            strategy_name = random.choice(self.available_strategies)
+            return self._decode_strategy(strategy_name, complexity)
 
-        for strategy, performances in self.strategy_performance[project_type].items():
-            avg_performance = sum(performances) / len(performances)
-            if avg_performance > best_performance:
-                best_performance = avg_performance
+        strategy_name = self._ucb1_select(project_type)
+        print(f"  [MetaLearner] Selected strategy via UCB1: {strategy_name}")
+        return self._decode_strategy(strategy_name, complexity)
+
+    def _ucb1_select(self, project_type: str) -> str:
+        """
+        Selects a strategy using the Upper Confidence Bound (UCB1) formula.
+        """
+        total_pulls = sum(len(perfs) for perfs in self.strategy_performance[project_type].values())
+
+        # Ensure total_pulls is not zero to avoid log(0)
+        if total_pulls == 0:
+            return random.choice(self.available_strategies)
+
+        best_strategy = None
+        max_ucb = float('-inf')
+
+        for strategy in self.available_strategies:
+            performances = self.strategy_performance[project_type].get(strategy)
+
+            if not performances:
+                # If a strategy has never been tried, it gets infinite UCB
+                return strategy
+
+            avg_perf = sum(performances) / len(performances)
+            exploration_bonus = math.sqrt(2 * math.log(total_pulls) / len(performances))
+            ucb = avg_perf + exploration_bonus
+
+            if ucb > max_ucb:
+                max_ucb = ucb
                 best_strategy = strategy
 
-        return self._decode_strategy(best_strategy, complexity)
+        return best_strategy if best_strategy else random.choice(self.available_strategies)
 
     def _infer_strategy(self, config: Dict[str, Any]) -> str:
         """Infers the name of a strategy from its configuration parameters.
@@ -1335,6 +1371,46 @@ class Verifier:
             return {'competitive_ratio': float('inf')}
 
         metrics = json.loads(result_alg.stdout)
+
+        # Evaluate predictor quality
+        from predictor_evaluator import PredictorEvaluator
+        import importlib.util
+        import pandas as pd
+        import os
+
+        spec = importlib.util.spec_from_file_location("predictor", predictor_script_path)
+        predictor_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(predictor_module)
+
+        evaluator = PredictorEvaluator()
+
+        # Create a train/test split for a fair evaluation
+        full_data = pd.read_csv(problem_context.historical_data_path)
+        if len(full_data) > 10:
+            # Use the first n-3 rows for training, last 3 for testing
+            split_point = len(full_data) - 3
+            train_df = full_data.iloc[:split_point]
+            test_data = list(full_data['value'].iloc[split_point:].items())
+
+            # Write the training data to a temporary file
+            temp_train_path = "temp_train_history.csv"
+            train_df.to_csv(temp_train_path, index=False)
+
+            # Instantiate the predictor with only the training data
+            predictor_for_eval = predictor_module.Predictor(temp_train_path)
+
+            # Evaluate on the hold-out test set
+            predictor_metrics = evaluator.evaluate_uq_calibration(predictor_for_eval, test_data)
+            metrics.update(predictor_metrics)
+
+            # Clean up the temporary file
+            os.remove(temp_train_path)
+        else:
+            # If the dataset is too small, we can't evaluate the predictor.
+            # Add default metrics to ensure the key exists for the test.
+            metrics['coverage_rate'] = 0.0
+            metrics['interval_sharpness'] = float('inf')
+
 
         # Save the verified solution to the registry
         problem_type = "ski_rental" if "ski" in algorithm_script_path else "one_max"
