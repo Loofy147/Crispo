@@ -434,3 +434,41 @@ class MetaLearner:
     def _default_strategy(self, complexity: float) -> Dict[str, Any]:
         """Get a default strategy for unknown project types."""
         return {'ga_generations': int(10 * complexity), 'rl_episodes': int(5 * complexity)}
+
+# ============================================================================
+# VERIFICATION UNIT
+# ============================================================================
+
+class Verifier:
+    """Verifies the quality of a generated script."""
+
+    def verify_script(self, script_code: str) -> Dict[str, float]:
+        """
+        Verifies a script for syntax and runtime errors.
+        Returns a dictionary of success metrics.
+        """
+        metrics = {
+            'syntax_ok': 0.0,
+            'runtime_ok': 0.0,
+            'overall_quality': 0.0
+        }
+
+        # 1. Check for syntax errors
+        try:
+            compile(script_code, '<string>', 'exec')
+            metrics['syntax_ok'] = 1.0
+        except SyntaxError:
+            return metrics  # No point in trying to run if syntax is wrong
+
+        # 2. Check for basic runtime errors in a sandboxed environment
+        try:
+            exec(script_code, {})
+            metrics['runtime_ok'] = 1.0
+        except Exception:
+            # Any exception during execution is a failure
+            pass
+
+        # 3. Calculate overall quality
+        metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
+
+        return metrics

@@ -6,7 +6,8 @@ from orchestrator_core import (
     AttentionRouter,
     CodeGenerator,
     MetaLearner,
-    TaskMetadata
+    TaskMetadata,
+    Verifier
 )
 from orchestrator import OrchestratorAI, OrchestrationContext
 from advanced_orchestrator import (
@@ -48,6 +49,32 @@ class TestAdvancedFeatures(unittest.TestCase):
         fo = FederatedOptimizer(num_clients=5)
         optimized_params = fo.optimize(self.params)
         self.assertEqual(optimized_params, self.params)
+
+class TestVerifier(unittest.TestCase):
+
+    def setUp(self):
+        self.verifier = Verifier()
+
+    def test_verify_script_syntax_error(self):
+        script = "def a: pass"
+        metrics = self.verifier.verify_script(script)
+        self.assertEqual(metrics['syntax_ok'], 0.0)
+        self.assertEqual(metrics['runtime_ok'], 0.0)
+        self.assertEqual(metrics['overall_quality'], 0.0)
+
+    def test_verify_script_runtime_error(self):
+        script = "a = 1 / 0"
+        metrics = self.verifier.verify_script(script)
+        self.assertEqual(metrics['syntax_ok'], 1.0)
+        self.assertEqual(metrics['runtime_ok'], 0.0)
+        self.assertEqual(metrics['overall_quality'], 0.5)
+
+    def test_verify_script_success(self):
+        script = "a = 1 + 1"
+        metrics = self.verifier.verify_script(script)
+        self.assertEqual(metrics['syntax_ok'], 1.0)
+        self.assertEqual(metrics['runtime_ok'], 1.0)
+        self.assertEqual(metrics['overall_quality'], 1.0)
 
 class TestCodeGenerator(unittest.TestCase):
 

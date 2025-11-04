@@ -17,7 +17,8 @@ from orchestrator_core import (
     AttentionRouter,
     CodeGenerator,
     MetaLearner,
-    TaskMetadata
+    TaskMetadata,
+    Verifier
 )
 from advanced_orchestrator import (
     TransferLearningEngine,
@@ -39,6 +40,7 @@ class OrchestratorAI:
         self.attention_router = AttentionRouter()
         self.code_generator = CodeGenerator()
         self.meta_learner = meta_learner
+        self.verifier = Verifier()
 
         # Initialize advanced components
         self.transfer_learning_engine = TransferLearningEngine(model_store={})
@@ -136,13 +138,24 @@ class OrchestratorAI:
         if enable_federated_optimization:
             final_params = self.federated_optimizer.optimize(final_params)
 
+        # Phase 4: Verification and Feedback
+        print("\n🔬 PHASE 4: Verification and Feedback")
+        total_quality = 0.0
+        for i, script in enumerate(generated_scripts):
+            metrics = self.verifier.verify_script(script)
+            print(f"  - Verified Layer {i}: Syntax OK={metrics['syntax_ok']}, Runtime OK={metrics['runtime_ok']}")
+            total_quality += metrics['overall_quality']
+
+        final_quality = total_quality / len(generated_scripts) if generated_scripts else 0.0
+        print(f"  - Final Aggregated Quality: {final_quality:.2f}")
+
         # Record task for meta-learning
         task_metadata = TaskMetadata(
             task_id=f"{project_type}-{datetime.now().isoformat()}",
             project_type=project_type,
             complexity_level=complexity,
             domain=domain,
-            success_metrics={'overall_quality': 0.85}, # Dummy value for now
+            success_metrics={'overall_quality': final_quality},
             optimal_config=strategy,
             timestamp=datetime.now().isoformat()
         )
