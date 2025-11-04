@@ -1041,38 +1041,40 @@ class Verifier:
         self,
         script_code: str,
         trust_parameter: float,
-        problem_params: Dict[str, Any]
-    ) -> Dict[str, float]:
+        problem_params: Dict[str, Any],
+        error_levels: List[float]
+    ) -> Dict[str, Any]:
         """
-        Evaluates a learning-augmented algorithm for consistency and robustness.
+        Evaluates a learning-augmented algorithm for consistency, robustness, and smoothness.
 
-        This method runs the generated script under various scenarios to measure
-        its performance with perfect and worst-case predictions.
+        This method runs the generated script under various scenarios to measure its performance.
 
         Args:
-            script_code (str): The Python code of the learning-augmented algorithm.
-            trust_parameter (float): The lambda value to pass to the script.
-            problem_params (Dict[str, Any]): A dictionary of problem-specific
-                parameters, e.g., {'buy_cost': 100} for ski rental.
+            script_code (str): The Python code of the LAA.
+            trust_parameter (float): The lambda value for the algorithm.
+            problem_params (Dict[str, Any]): Parameters for the problem,
+                e.g., {'buy_cost': 100} for ski rental.
+            error_levels (List[float]): A list of prediction error levels to
+                test for the smoothness profile (e.g., [0.1, 0.2, ...]).
 
         Returns:
-            Dict[str, float]: A dictionary containing the measured 'consistency'
-                and 'robustness' of the algorithm.
+            Dict[str, Any]: A dictionary containing 'consistency', 'robustness',
+                and 'smoothness_profile'.
         """
-        metrics = {'consistency': 0.0, 'robustness': 0.0}
+        metrics = {'consistency': 0.0, 'robustness': 0.0, 'smoothness_profile': {}}
         buy_cost = problem_params.get('buy_cost', 100)
 
         consistency_ratios = []
         robustness_ratios = []
+        smoothness_ratios = {level: [] for level in error_levels}
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
             temp_file.write(script_code)
             temp_filename = temp_file.name
 
         try:
-            # Test over a range of scenarios (e.g., actual skiing days)
             for actual_days in range(1, buy_cost * 2):
-                # 1. Evaluate Consistency (perfect prediction)
+                # 1. Evaluate Consistency
                 perfect_prediction = actual_days
                 result = subprocess.run(
                     ['python3', temp_filename, str(buy_cost), str(perfect_prediction), str(trust_parameter), str(actual_days)],
@@ -1082,8 +1084,7 @@ class Verifier:
                     output = json.loads(result.stdout)
                     consistency_ratios.append(output['competitive_ratio'])
 
-                # 2. Evaluate Robustness (worst-case prediction)
-                # A simple worst-case prediction for ski rental is to predict 1 day
+                # 2. Evaluate Robustness
                 worst_prediction = 1
                 result = subprocess.run(
                     ['python3', temp_filename, str(buy_cost), str(worst_prediction), str(trust_parameter), str(actual_days)],
@@ -1093,10 +1094,24 @@ class Verifier:
                     output = json.loads(result.stdout)
                     robustness_ratios.append(output['competitive_ratio'])
 
+                # 3. Evaluate Smoothness
+                for error in error_levels:
+                    noisy_prediction = max(1, int(perfect_prediction * (1 + error)))
+                    result = subprocess.run(
+                        ['python3', temp_filename, str(buy_cost), str(noisy_prediction), str(trust_parameter), str(actual_days)],
+                        capture_output=True, text=True, timeout=10
+                    )
+                    if result.returncode == 0:
+                        output = json.loads(result.stdout)
+                        smoothness_ratios[error].append(output['competitive_ratio'])
+
             if consistency_ratios:
                 metrics['consistency'] = max(consistency_ratios)
             if robustness_ratios:
                 metrics['robustness'] = max(robustness_ratios)
+            for error in error_levels:
+                if smoothness_ratios[error]:
+                    metrics['smoothness_profile'][error] = max(smoothness_ratios[error])
 
         finally:
             import os

@@ -163,15 +163,19 @@ class OrchestratorAI:
 
         # If it's a learning-augmented algorithm, use the new evaluation method
         if "ski rental" in self.context.objective.lower():
-            # For LAA, we only generate one script
             laa_script = generated_scripts[0]
+            error_levels = [0.1, 0.25, 0.5, 0.75, 1.0] # Define error levels to test
             laa_metrics = self.verifier.evaluate_learning_augmented_algorithm(
                 script_code=laa_script,
                 trust_parameter=trust_parameter,
-                problem_params={'buy_cost': 100} # Example buy cost
+                problem_params={'buy_cost': 100},
+                error_levels=error_levels
             )
-            print(f"  - LAA Consistency: {laa_metrics['consistency']:.2f}-competitive")
-            print(f"  - LAA Robustness: {laa_metrics['robustness']:.2f}-competitive")
+            print(f"  - LAA Consistency (Error=0%): {laa_metrics['consistency']:.2f}-competitive")
+            print(f"  - LAA Robustness (Worst-Case Error): {laa_metrics['robustness']:.2f}-competitive")
+            print("  - LAA Smoothness Profile:")
+            for error, ratio in laa_metrics['smoothness_profile'].items():
+                print(f"    - Error Level {int(error*100)}%: {ratio:.2f}-competitive")
             success_metrics = laa_metrics
         else:
             # Fallback to the original pipeline verification

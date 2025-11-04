@@ -331,8 +331,15 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         task_record = meta_learner.task_history[0]
         self.assertIn('consistency', task_record.success_metrics)
         self.assertIn('robustness', task_record.success_metrics)
+        self.assertIn('smoothness_profile', task_record.success_metrics)
+
         # The pseudocode's formula is not 2-robust. We test that it's bounded.
         self.assertLess(task_record.success_metrics['robustness'], 6.0)
+
+        # Verify the smoothness profile is sensible (ratios should not decrease with more error)
+        profile = task_record.success_metrics['smoothness_profile']
+        sorted_ratios = [v for k, v in sorted(profile.items())]
+        self.assertTrue(all(sorted_ratios[i] <= sorted_ratios[i+1] for i in range(len(sorted_ratios)-1)))
 
 
 if __name__ == '__main__':
