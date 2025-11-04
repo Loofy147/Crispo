@@ -14,6 +14,7 @@ from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from datetime import datetime
+from solution_registry import save_solution
 
 # ============================================================================
 # CORE DATA STRUCTURES
@@ -149,11 +150,11 @@ class GAOptimizer:
 
         for gen in range(generations):
             fitness_scores = [self._evaluate_fitness(ind, context) for ind in population]
-            
+
             print(f"  [GA] Gen {gen + 1}: Best Fitness={max(fitness_scores):.3f}, Avg Fitness={sum(fitness_scores)/len(fitness_scores):.3f}")
 
             parents = self._tournament_selection(population, fitness_scores)
-            
+
             offspring = []
             for i in range(0, len(parents) - 1, 2):
                 child1, child2 = self._crossover(parents[i], parents[i+1])
@@ -263,7 +264,7 @@ class GAOptimizer:
         """
         if random.random() > self.crossover_rate:
             return parent1.clone(), parent2.clone()
-        
+
         child1, child2 = parent1.clone(), parent2.clone()
         weight_keys = list(parent1.weights.keys())
         crossover_point = random.randint(0, len(weight_keys))
@@ -360,7 +361,7 @@ class RLAgent:
             if episode_reward > best_reward:
                 best_reward = episode_reward
                 best_params = params.clone()
-        
+
         return best_params
 
     def _encode_state(self, params: LayerParameters, context: Dict) -> str:
@@ -517,7 +518,7 @@ class AttentionRouter:
             return {'attended_output': query, 'attention_weights': []}
 
         scores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(self.embed_dim) for key in keys]
-        
+
         exp_scores = [math.exp(s) for s in scores]
         sum_exp = sum(exp_scores)
         attention_weights = [s / sum_exp for s in exp_scores]
@@ -1278,4 +1279,14 @@ class Verifier:
             print(f"  [Verifier] Algorithm script failed: {result_alg.stderr}")
             return {'competitive_ratio': float('inf')}
 
-        return json.loads(result_alg.stdout)
+        metrics = json.loads(result_alg.stdout)
+
+        # Save the verified solution to the registry
+        problem_type = "ski_rental" if "ski" in algorithm_script_path else "one_max"
+        save_solution(
+            problem_type=problem_type,
+            performance_metrics=metrics
+        )
+        print(f"  [Registry] Saved solution for {problem_type} with competitive ratio: {metrics.get('competitive_ratio')}")
+
+        return metrics

@@ -9,7 +9,7 @@ import random
 from typing import Dict, List, Any
 from datetime import datetime
 
-from orchestrator_core import (
+from crispo_core import (
     OrchestrationContext,
     LayerParameters,
     GAOptimizer,
@@ -22,18 +22,19 @@ from orchestrator_core import (
     SkiRentalContext,
     OneMaxSearchContext
 )
-from advanced_orchestrator import (
+from solution_registry import query_registry
+from advanced_crispo import (
     FederatedOptimizer
 )
 import transfer_learning_pipeline as tlp
 import nas_pipeline as nas
 
 # ============================================================================
-# ORCHESTRATOR ENGINE
+# CRISPO ENGINE
 # ============================================================================
 
-class OrchestratorAI:
-    """Main orchestration engine for the OrchestratorAI system.
+class Crispo:
+    """Main orchestration engine for the Crispo system.
 
     This class integrates all the core components (GA, RL, Code Generation,
     etc.) and advanced features (Transfer Learning, NAS) to execute the
@@ -42,7 +43,7 @@ class OrchestratorAI:
     """
 
     def __init__(self, context: OrchestrationContext, meta_learner: MetaLearner):
-        """Initializes the OrchestratorAI engine.
+        """Initializes the Crispo engine.
 
         Args:
             context (OrchestrationContext): The global context for this
@@ -224,14 +225,14 @@ class OrchestratorAI:
 # ============================================================================
 
 def main():
-    """Command-line entry point for the OrchestratorAI system.
+    """Command-line entry point for the Crispo system.
 
     This function parses command-line arguments, initializes the
     OrchestrationContext and MetaLearner (loading from a file if specified),
-    creates the main OrchestratorAI engine, runs the orchestration process,
+    creates the main Crispo engine, runs the orchestration process,
     and saves the MetaLearner's state if requested.
     """
-    parser = argparse.ArgumentParser(description="OrchestratorAI: Autonomous Multi-Layer Script Orchestration System")
+    parser = argparse.ArgumentParser(description="Crispo: Autonomous Co-Design of ML Predictors and Algorithms")
     parser.add_argument("--project", type=str, default="AutoCode_Genesis", help="Project name.")
     parser.add_argument("--objective", type=str, default="Generate a self-optimizing multi-layer data processing script", help="The main objective.")
     parser.add_argument("--project_type", type=str, default="data_pipeline", help="Type of the project (e.g., 'data_pipeline', 'web_scraper').")
@@ -243,6 +244,7 @@ def main():
     parser.add_argument("--enable-nas", action="store_true", help="Enable Neural Architecture Search.")
     parser.add_argument("--enable-federated-optimization", action="store_true", help="Enable Federated Optimization.")
     parser.add_argument("--trust-parameter", type=float, default=0.8, help="Trust parameter (lambda) for the learning-augmented algorithm.")
+    parser.add_argument("--query-registry", type=str, help="Query the solution registry. E.g., 'competitive_ratio:1.5'")
 
     args = parser.parse_args()
 
@@ -263,8 +265,8 @@ def main():
     else:
         meta_learner = MetaLearner()
 
-    orchestrator = OrchestratorAI(context, meta_learner)
-    final_scripts = orchestrator.orchestrate(
+    crispo = Crispo(context, meta_learner)
+    final_scripts = crispo.orchestrate(
         project_type=args.project_type,
         domain=args.domain,
         complexity=args.complexity,
@@ -273,6 +275,28 @@ def main():
         enable_federated_optimization=args.enable_federated_optimization,
         trust_parameter=args.trust_parameter
     )
+
+    # Handle registry query if requested
+    if args.query_registry:
+        try:
+            metric, threshold_str = args.query_registry.split(':')
+            threshold = float(threshold_str)
+            results = query_registry(metric, threshold)
+
+            print("\n" + "="*70)
+            print("SOLUTION REGISTRY QUERY RESULTS")
+            print(f"Solutions with {metric} <= {threshold}:")
+            print("="*70)
+            if not results:
+                print("No solutions found matching the criterion.")
+            else:
+                for res in results:
+                    print(f"  - Problem: {res['problem_type']}, Version: {res['version']}, Metrics: {res['metrics']}")
+            print("="*70)
+            return # Exit after querying
+        except ValueError:
+            print("Invalid query format. Please use 'metric:value', e.g., 'competitive_ratio:1.5'")
+            return
 
     # Save the MetaLearner's state if requested
     if args.save_metaknowledge:

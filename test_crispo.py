@@ -6,7 +6,8 @@ GAOptimizer, etc. An integration test class is also included to verify the
 end-to-end functionality of the main orchestrator pipeline.
 """
 import unittest
-from orchestrator_core import (
+import os
+from crispo_core import (
     LayerParameters,
     GAOptimizer,
     RLAgent,
@@ -16,8 +17,8 @@ from orchestrator_core import (
     TaskMetadata,
     Verifier
 )
-from orchestrator import OrchestratorAI, OrchestrationContext
-from advanced_orchestrator import (
+from crispo import Crispo, OrchestrationContext
+from advanced_crispo import (
     FederatedOptimizer
 )
 
@@ -236,9 +237,9 @@ class TestOrchestratorIntegration(unittest.TestCase):
             objective="Test Objective"
         )
         meta_learner = MetaLearner()
-        orchestrator = OrchestratorAI(context, meta_learner)
+        crispo = Crispo(context, meta_learner)
 
-        final_scripts = orchestrator.orchestrate(
+        final_scripts = crispo.orchestrate(
             project_type="data_pipeline",
             domain="testing",
             complexity=0.5,
@@ -261,9 +262,9 @@ class TestOrchestratorIntegration(unittest.TestCase):
             objective="Test Objective"
         )
         meta_learner = MetaLearner()
-        orchestrator = OrchestratorAI(context, meta_learner)
+        crispo = Crispo(context, meta_learner)
 
-        final_scripts = orchestrator.orchestrate(
+        final_scripts = crispo.orchestrate(
             project_type="data_pipeline",
             domain="testing",
             complexity=0.5,
@@ -295,9 +296,9 @@ class TestOrchestratorIntegration(unittest.TestCase):
 
         # 2. Run the orchestrator with transfer learning enabled
         context = OrchestrationContext(project="TLTest", objective="Test TL")
-        orchestrator = OrchestratorAI(context, MetaLearner())
+        crispo = Crispo(context, MetaLearner())
 
-        orchestrator.orchestrate(
+        crispo.orchestrate(
             project_type="data_pipeline",
             domain="testing",
             complexity=0.9, # Start with high complexity
@@ -322,10 +323,10 @@ class TestOrchestratorIntegration(unittest.TestCase):
     def test_production_nas_pipeline(self):
         """Test that the new NAS pipeline runs without errors."""
         context = OrchestrationContext(project="NASTest", objective="Test NAS")
-        orchestrator = OrchestratorAI(context, MetaLearner())
+        crispo = Crispo(context, MetaLearner())
 
         # We just want to ensure this runs to completion without crashing
-        final_scripts = orchestrator.orchestrate(
+        final_scripts = crispo.orchestrate(
             project_type="data_pipeline",
             domain="testing",
             complexity=0.9,
@@ -352,9 +353,9 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
             objective="Generate a learning-augmented algorithm for the ski rental problem"
         )
         meta_learner = MetaLearner(epsilon=0.0)
-        orchestrator = OrchestratorAI(context, meta_learner)
+        crispo = Crispo(context, meta_learner)
 
-        final_scripts = orchestrator.orchestrate(
+        final_scripts = crispo.orchestrate(
             project_type="laa_ski_rental",
             domain="online_algorithms",
             complexity=0.5,
@@ -376,9 +377,59 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         self.assertGreater(task_record.success_metrics['competitive_ratio'], 0)
 
         # Clean up generated artifacts
-        os.remove("generated_algorithm.py")
-        os.remove("generated_predictor.py")
         os.remove("ski_rental_history.csv")
+        if os.path.exists("solution_registry"):
+            import shutil
+            shutil.rmtree("solution_registry")
+
+class TestSolutionRegistry(unittest.TestCase):
+    """Tests for the Solution Registry functionality."""
+
+    def setUp(self):
+        """Set up a clean registry for each test."""
+        import shutil
+        if os.path.exists("solution_registry"):
+            shutil.rmtree("solution_registry")
+
+    def tearDown(self):
+        """Clean up the registry after each test."""
+        import shutil
+        if os.path.exists("solution_registry"):
+            shutil.rmtree("solution_registry")
+
+    def test_save_and_load_solution(self):
+        """Test that a solution can be saved and then loaded."""
+        from solution_registry import save_solution, load_latest_solution
+
+        # Create dummy generated files for the registry to move
+        with open("generated_algorithm.py", "w") as f: f.write("alg")
+        with open("generated_predictor.py", "w") as f: f.write("pred")
+
+        save_solution("test_problem", {"competitive_ratio": 1.2})
+
+        loaded = load_latest_solution("test_problem")
+        self.assertIsNotNone(loaded)
+        self.assertTrue(os.path.exists(loaded["algorithm_script_path"]))
+        self.assertTrue(os.path.exists(loaded["predictor_script_path"]))
+
+
+    def test_query_registry(self):
+        """Test the querying functionality of the registry."""
+        from solution_registry import save_solution, query_registry
+
+        # Save two solutions for the same problem
+        with open("generated_algorithm.py", "w") as f: f.write("alg1")
+        with open("generated_predictor.py", "w") as f: f.write("pred1")
+        save_solution("query_problem", {"competitive_ratio": 1.5})
+
+        with open("generated_algorithm.py", "w") as f: f.write("alg2")
+        with open("generated_predictor.py", "w") as f: f.write("pred2")
+        save_solution("query_problem", {"competitive_ratio": 1.1})
+
+        results = query_registry("competitive_ratio", 1.2)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['problem_type'], "query_problem")
+        self.assertAlmostEqual(results[0]['metrics']['competitive_ratio'], 1.1)
 
     def test_one_max_laa_pipeline(self):
         """Test the end-to-end pipeline for the One-Max Search LAA."""

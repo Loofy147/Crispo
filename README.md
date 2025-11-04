@@ -1,8 +1,8 @@
-# OrchestratorAI
+# Crispo
 
 ## Purpose
 
-OrchestratorAI is an autonomous system designed to translate high-level human objectives into functional, multi-layer software pipelines. It leverages a combination of artificial intelligence techniques to autonomously design, generate, verify, and learn from its own code. The primary goal of this project is to explore the potential of AI as an autonomous software engineer, capable of solving complex problems by composing and orchestrating multiple software components.
+Crispo is an autonomous system that co-designs and generates complete, production-ready intelligent systems, each consisting of a machine learning predictor and a learning-augmented algorithm that consumes its predictions. It represents a complete, end-to-end implementation of the principles of modern Learning-Augmented Algorithms, from initial design to "live" evaluation and self-improvement.
 
 ## Architecture Overview
 
@@ -35,7 +35,7 @@ The system is architected as a pipeline of intelligent agents, each responsible 
 To run the orchestrator, use the following command:
 
 ```bash
-python3 orchestrator.py [OPTIONS]
+python3 crispo.py [OPTIONS]
 ```
 
 ### Options
@@ -51,6 +51,7 @@ python3 orchestrator.py [OPTIONS]
 - `--enable-nas`: Enable Neural Architecture Search.
 - `--enable-federated-optimization`: Enable Federated Optimization.
 - `--trust-parameter`: The trust parameter (lambda) for learning-augmented algorithms.
+- `--query-registry`: Query the solution registry. E.g., 'competitive_ratio:1.5'
 
 ## ✨ New in v2.0: Learning-Augmented Algorithms
 
@@ -76,16 +77,28 @@ This package is then subjected to a realistic, two-stage "live" evaluation: the 
 ```bash
 # This will generate generated_predictor.py and generated_algorithm.py,
 # then run them together to evaluate their combined performance.
-python3 orchestrator.py \
+python3 crispo.py \
     --objective "Generate a learning-augmented algorithm for the ski rental problem" \
     --trust-parameter 0.8 \
     --save-metaknowledge laa_knowledge.pkl
+
+### 📦 New in v3.0: The Solution Registry
+
+Crispo now includes a **Solution Registry** that automatically saves and versions every co-designed solution that passes the rigorous `Verifier` evaluation. This creates a persistent, queryable database of high-quality solutions.
+
+You can query the registry directly from the command line to find solutions that meet specific performance criteria.
+
+#### Example Query
+```bash
+# Find all ski-rental solutions with a competitive ratio of 1.2 or better
+python3 crispo.py --query-registry "competitive_ratio:1.2"
+```
 ```
 
 ### Example
 
 ```bash
-python3 orchestrator.py \
+python3 crispo.py \
     --project "MyProject" \
     --objective "Generate a multi-layer script for data analysis" \
     --project_type "data_pipeline" \
