@@ -104,35 +104,14 @@ class OrchestratorAI:
             episodes=episodes
         )
 
-        # Phase 3: Generate code for multiple layers with attention
-        print("\n💻 PHASE 3: Multi-Layer Script Generation with Attention")
+        # Phase 3: Generate and Execute Pipeline
+        print("\n💻 PHASE 3: Pipeline Generation and Execution")
         generated_scripts = []
-        layer_outputs = []  # Store outputs for attention mechanism
-
-        # Initial query for the first layer (can be based on complexity)
-        query = [complexity] * 16  # embed_dim = 16
+        pipeline_context = {}  # Initialize the data pipeline context
 
         for i in range(3): # Generate 3 layers
-            # Use attention to refine parameters for the current layer
-            if layer_outputs:
-                keys = values = layer_outputs
-                attention_result = self.attention_router.execute(query, keys, values)
-
-                # Update parameters based on attention output
-                attention_weights = attention_result['attention_weights']
-                if attention_weights:
-                    # Simple update: adjust temperature based on max attention weight
-                    final_params.temperature *= (1 + max(attention_weights))
-
             script = self.code_generator.generate(final_params, i)
             generated_scripts.append(script)
-
-            # Simulate layer output for the next attention step
-            # In a real system, this would be the actual output of the script
-            mock_output = [random.random() for _ in range(16)]
-            layer_outputs.append(mock_output)
-            query = mock_output  # Use the output as the query for the next layer
-
             print(f"  - Generated Layer {i} with Temp={final_params.temperature:.2f}")
 
         if enable_federated_optimization:
@@ -140,13 +119,9 @@ class OrchestratorAI:
 
         # Phase 4: Verification and Feedback
         print("\n🔬 PHASE 4: Verification and Feedback")
-        total_quality = 0.0
-        for i, script in enumerate(generated_scripts):
-            metrics = self.verifier.verify_script(script)
-            print(f"  - Verified Layer {i}: Syntax OK={metrics['syntax_ok']}, Runtime OK={metrics['runtime_ok']}")
-            total_quality += metrics['overall_quality']
-
-        final_quality = total_quality / len(generated_scripts) if generated_scripts else 0.0
+        # The verifier will now handle the pipeline execution
+        metrics = self.verifier.verify_pipeline(generated_scripts)
+        final_quality = metrics['overall_quality']
         print(f"  - Final Aggregated Quality: {final_quality:.2f}")
 
         # Record task for meta-learning
