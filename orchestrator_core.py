@@ -21,7 +21,17 @@ from datetime import datetime
 
 @dataclass
 class TaskMetadata:
-    """Metadata about orchestration tasks for meta-learning."""
+    """Encapsulates metadata about an orchestration task for meta-learning.
+
+    Attributes:
+        task_id: A unique identifier for the task.
+        project_type: The category of the project (e.g., 'data_pipeline').
+        complexity_level: The complexity of the task, typically from 0.0 to 1.0.
+        domain: The application domain (e.g., 'finance', 'data_engineering').
+        success_metrics: A dictionary of metrics evaluating the task's success.
+        optimal_config: The configuration that yielded the best results.
+        timestamp: The ISO format timestamp of when the task was executed.
+    """
     task_id: str
     project_type: str
     complexity_level: float
@@ -32,7 +42,15 @@ class TaskMetadata:
 
 @dataclass
 class OrchestrationContext:
-    """Global context for a single orchestration run."""
+    """Holds the global context for a single orchestration run.
+
+    Attributes:
+        project: The name of the project.
+        objective: The high-level objective of the orchestration.
+        feedback_loop: A dictionary to store feedback data during execution.
+        resource_usage: A dictionary to track resource consumption.
+        failure_cases: A list of any failure cases encountered.
+    """
     project: str
     objective: str
     feedback_loop: Dict = field(default_factory=dict)
@@ -41,20 +59,39 @@ class OrchestrationContext:
 
 @dataclass
 class ScriptToken:
-    """Represents a token in the script generation vocabulary."""
+    """Represents a token in the script generation vocabulary.
+
+    Attributes:
+        value: The string value of the token.
+        weight: The weight associated with the token, used in generation.
+    """
     value: str
     weight: float = 1.0
 
 @dataclass
 class LayerParameters:
-    """Parameters for a script generation layer."""
+    """Defines the parameters for generating a single script layer.
+
+    Attributes:
+        layer_id: The unique identifier for the layer.
+        weights: A dictionary of weights influencing generation.
+        biases: A dictionary of biases influencing generation.
+        temperature: A value controlling the randomness of the generation process.
+    """
     layer_id: int
     weights: Dict[str, float]
     biases: Dict[str, float]
     temperature: float = 1.0
 
-    def clone(self):
-        """Create a deep copy for genetic algorithms."""
+    def clone(self) -> 'LayerParameters':
+        """Creates a deep copy of the LayerParameters instance.
+
+        This is primarily used to create new individuals in the genetic algorithm
+        without modifying the original parameters.
+
+        Returns:
+            A new LayerParameters instance with the same attribute values.
+        """
         return LayerParameters(
             layer_id=self.layer_id,
             weights=self.weights.copy(),
@@ -67,15 +104,47 @@ class LayerParameters:
 # ============================================================================
 
 class GAOptimizer:
-    """Evolves layer configurations using a genetic algorithm."""
+    """Evolves layer configurations using a genetic algorithm.
+
+    This class implements a standard genetic algorithm to search for an optimal
+    set of LayerParameters. It includes selection, crossover, and mutation
+    operators to evolve a population of parameter sets over a number of
+    generations. An elitism mechanism is used to ensure the best individual
+    from one generation is carried over to the next.
+    """
 
     def __init__(self, population_size: int = 20, mutation_rate: float = 0.15, crossover_rate: float = 0.7):
+        """Initializes the GAOptimizer.
+
+        Args:
+            population_size (int): The number of individuals (parameter sets)
+                in each generation.
+            mutation_rate (float): The probability of an individual's genes
+                (parameters) being randomly altered.
+            crossover_rate (float): The probability that two parents will
+                exchange genetic material to create offspring.
+        """
         self.population_size = population_size
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
 
     def execute(self, template_params: LayerParameters, context: Dict, generations: int = 10) -> LayerParameters:
-        """Run the genetic algorithm."""
+        """Runs the genetic algorithm to find the best LayerParameters.
+
+        The algorithm iteratively refines a population of LayerParameters
+        instances through selection, crossover, and mutation.
+
+        Args:
+            template_params (LayerParameters): An initial LayerParameters
+                instance to seed the population.
+            context (Dict): A dictionary providing context (e.g.,
+                'desired_complexity') for the fitness evaluation.
+            generations (int): The number of generations to run the evolution.
+
+        Returns:
+            LayerParameters: The best LayerParameters instance found after all
+                generations.
+        """
         population = self._initialize_population(template_params)
 
         for gen in range(generations):
@@ -115,7 +184,14 @@ class GAOptimizer:
         return population[best_idx]
 
     def _initialize_population(self, template: LayerParameters) -> List[LayerParameters]:
-        """Create an initial random population."""
+        """Creates an initial population of LayerParameters.
+
+        Args:
+            template: The LayerParameters instance to use as a template.
+
+        Returns:
+            A list of new LayerParameters instances with randomized attributes.
+        """
         population = []
         for _ in range(self.population_size):
             individual = template.clone()
@@ -128,7 +204,19 @@ class GAOptimizer:
         return population
 
     def _evaluate_fitness(self, params: LayerParameters, context: Dict) -> float:
-        """Fitness function. Higher is better."""
+        """Calculates the fitness of a single LayerParameters instance.
+
+        The fitness function rewards parameter sets that are well-balanced and
+        align with the desired complexity from the context.
+
+        Args:
+            params: The LayerParameters instance to evaluate.
+            context: A dictionary containing contextual information, like
+                'desired_complexity'.
+
+        Returns:
+            A float representing the fitness score, where higher is better.
+        """
         fitness = 0.0
         # Reward balanced weights
         avg_weight = sum(params.weights.values()) / len(params.weights)
@@ -143,7 +231,15 @@ class GAOptimizer:
         return max(0.0, fitness)
 
     def _tournament_selection(self, population: List[LayerParameters], fitness: List[float]) -> List[LayerParameters]:
-        """Select parents via tournament."""
+        """Selects parents from the population using tournament selection.
+
+        Args:
+            population: The current population of LayerParameters instances.
+            fitness: A list of fitness scores corresponding to the population.
+
+        Returns:
+            A list of selected parent LayerParameters instances.
+        """
         parents = []
         tournament_size = 3
         if len(population) < tournament_size:
@@ -156,7 +252,15 @@ class GAOptimizer:
         return parents
 
     def _crossover(self, parent1: LayerParameters, parent2: LayerParameters) -> Tuple[LayerParameters, LayerParameters]:
-        """Single-point crossover."""
+        """Performs single-point crossover between two parents.
+
+        Args:
+            parent1: The first parent LayerParameters instance.
+            parent2: The second parent LayerParameters instance.
+
+        Returns:
+            A tuple containing two new child LayerParameters instances.
+        """
         if random.random() > self.crossover_rate:
             return parent1.clone(), parent2.clone()
         
@@ -172,7 +276,14 @@ class GAOptimizer:
         return child1, child2
 
     def _mutate(self, params: LayerParameters) -> LayerParameters:
-        """Randomly mutate parameters."""
+        """Randomly mutates the attributes of a LayerParameters instance.
+
+        Args:
+            params: The LayerParameters instance to mutate.
+
+        Returns:
+            A new, mutated LayerParameters instance.
+        """
         mutated = params.clone()
         for key in mutated.weights:
             if random.random() < self.mutation_rate:
@@ -189,16 +300,45 @@ class GAOptimizer:
 # ============================================================================
 
 class RLAgent:
-    """Q-learning agent for parameter fine-tuning."""
+    """Uses a Q-learning algorithm to fine-tune LayerParameters.
+
+    This agent interacts with an environment defined by the LayerParameters,
+    taking actions to modify them and receiving rewards based on their quality.
+    It learns a policy to maximize these rewards over time using a Q-table to
+    store state-action values.
+    """
 
     def __init__(self, learning_rate: float = 0.1, discount: float = 0.95, epsilon: float = 0.2):
+        """Initializes the RLAgent.
+
+        Args:
+            learning_rate (float): The rate at which the agent learns from new
+                information (alpha in the Bellman equation).
+            discount (float): The discount factor for future rewards (gamma).
+            epsilon (float): The exploration rate for the epsilon-greedy
+                policy. A value of 0.2 means a 20% chance of exploring.
+        """
         self.learning_rate = learning_rate
         self.discount = discount
         self.epsilon = epsilon
         self.q_table: Dict[str, Dict[str, float]] = {}
 
     def execute(self, initial_params: LayerParameters, context: Dict, episodes: int = 5) -> LayerParameters:
-        """Execute RL fine-tuning."""
+        """Runs the RL fine-tuning process.
+
+        The agent iteratively refines a set of LayerParameters by taking actions,
+        observing rewards, and updating its Q-table.
+
+        Args:
+            initial_params (LayerParameters): The starting LayerParameters to
+                be tuned.
+            context (Dict): A dictionary providing context for state encoding.
+            episodes (int): The number of episodes to run the training.
+
+        Returns:
+            LayerParameters: The best LayerParameters instance found during
+                the episodes.
+        """
         best_params = initial_params.clone()
         best_reward = float('-inf')
 
@@ -224,7 +364,15 @@ class RLAgent:
         return best_params
 
     def _encode_state(self, params: LayerParameters, context: Dict) -> str:
-        """Encode state as a string for Q-table lookup."""
+        """Encodes the current state into a string for Q-table lookup.
+
+        Args:
+            params: The current LayerParameters.
+            context: A dictionary containing additional context.
+
+        Returns:
+            A string representation of the state.
+        """
         state_vec = [
             params.temperature,
             context.get('complexity', 0.5)
@@ -239,7 +387,17 @@ class RLAgent:
         return str(tuple(round(v, 1) for v in state_vec))
 
     def _select_action(self, state: str) -> Dict:
-        """Epsilon-greedy action selection."""
+        """Selects an action using an epsilon-greedy policy.
+
+        With probability epsilon, it explores a random action. Otherwise, it
+        exploits the best-known action for the given state.
+
+        Args:
+            state: The current state string.
+
+        Returns:
+            A dictionary representing the action to take.
+        """
         if random.random() < self.epsilon or state not in self.q_table or not self.q_table[state]:
             return {
                 'weight_delta': random.uniform(-0.1, 0.1),
@@ -250,7 +408,15 @@ class RLAgent:
         return json.loads(best_action_str)
 
     def _apply_action(self, params: LayerParameters, action: Dict) -> LayerParameters:
-        """Apply action to parameters."""
+        """Applies an action to a LayerParameters instance.
+
+        Args:
+            params: The LayerParameters to modify.
+            action: The action dictionary defining the modifications.
+
+        Returns:
+            A new LayerParameters instance with the action applied.
+        """
         new_params = params.clone()
         for key in new_params.weights:
             new_params.weights[key] += action['weight_delta']
@@ -260,7 +426,17 @@ class RLAgent:
         return new_params
 
     def _calculate_reward(self, params: LayerParameters) -> float:
-        """Calculate reward for the current parameters."""
+        """Calculates the reward for a given set of LayerParameters.
+
+        The reward function encourages balanced weights and a moderate
+        temperature value.
+
+        Args:
+            params: The LayerParameters to evaluate.
+
+        Returns:
+            A float representing the reward.
+        """
         reward = 0.0
         # Reward balanced weights
         weights = params.weights
@@ -273,7 +449,14 @@ class RLAgent:
         return reward
 
     def _update_q_value(self, state: str, action: Dict, reward: float, next_state: str):
-        """Update the Q-table."""
+        """Updates the Q-table using the Bellman equation.
+
+        Args:
+            state: The state in which the action was taken.
+            action: The action that was taken.
+            reward: The reward received for the action.
+            next_state: The resulting state after the action.
+        """
         action_str = json.dumps(action, sort_keys=True)
         if state not in self.q_table:
             self.q_table[state] = {}
@@ -293,15 +476,43 @@ class RLAgent:
 # ============================================================================
 
 class AttentionRouter:
-    """Multi-head attention for inter-layer communication."""
+    """Implements a multi-head attention mechanism for inter-layer communication.
+
+    This class allows different layers in the generated pipeline to share
+    information, enabling more cohesive and context-aware code generation. It
+    uses a simplified dot-product attention to weigh the importance of
+    different value vectors based on a query vector.
+    """
 
     def __init__(self, embed_dim: int = 16, num_heads: int = 4):
+        """Initializes the AttentionRouter.
+
+        Args:
+            embed_dim (int): The dimensionality of the embedding space.
+            num_heads (int): The number of attention heads to use.
+        """
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
 
     def execute(self, query: List[float], keys: List[List[float]], values: List[List[float]]) -> Dict:
-        """Execute the attention mechanism."""
+        """Executes the attention mechanism.
+
+        It calculates attention scores, applies a softmax to get weights, and
+        then computes a weighted sum of the values.
+
+        Args:
+            query (List[float]): The query vector, representing the current
+                context.
+            keys (List[List[float]]): A list of key vectors, corresponding to
+                the items to be attended to.
+            values (List[List[float]]): A list of value vectors, containing the
+                information to be retrieved.
+
+        Returns:
+            Dict: A dictionary containing the 'attended_output' (a list of
+                floats) and the 'attention_weights' (a list of floats).
+        """
         if not keys or not values:
             return {'attended_output': query, 'attention_weights': []}
 
@@ -326,12 +537,31 @@ class AttentionRouter:
 # ============================================================================
 
 class CodeGenerator:
-    """Generates multi-layer scripts with intent-based template selection."""
+    """Generates multi-layer scripts with intent-based template selection.
+
+    This class is responsible for creating the actual Python code for each
+    layer of the orchestration pipeline. It uses a combination of intent
+    detection (based on keywords in the objective) and parameter-driven logic
+    to select the most appropriate code template for a given layer.
+    """
 
     def generate(self, params: LayerParameters, layer_id: int, objective: str) -> str:
-        """
-        Selects and generates a script for a single layer based on the
-        pipeline's objective and the current layer ID.
+        """Selects and generates a script for a single layer.
+
+        This method uses keyword matching on the user's objective to select
+        the most logically appropriate template for each layer of the pipeline.
+        If a clear intent cannot be determined, it falls back to a
+        complexity-based selection mechanism.
+
+        Args:
+            params (LayerParameters): The LayerParameters for the current
+                layer, which influence the generated code's specifics.
+            layer_id (int): The ID of the current layer (e.g., 0, 1, 2).
+            objective (str): The user's high-level objective string, used for
+                intent detection.
+
+        Returns:
+            str: A string containing the generated Python script.
         """
         objective = objective.lower()
 
@@ -359,6 +589,15 @@ class CodeGenerator:
         return self._generate_simple_template(params, layer_id)
 
     def _generate_high_complexity_template(self, params: LayerParameters, layer_id: int) -> str:
+        """Generates a script for high-complexity data processing using NumPy.
+
+        Args:
+            params: The LayerParameters for the current layer.
+            layer_id: The ID of the current layer.
+
+        Returns:
+            A string containing the generated Python script.
+        """
         return f'''# Layer {layer_id}: High-Complexity Data Processing
 import numpy as np
 import json
@@ -385,6 +624,15 @@ if __name__ == '__main__':
 '''
 
     def _generate_transform_template(self, params: LayerParameters, layer_id: int) -> str:
+        """Generates a script for data transformation using pandas.
+
+        Args:
+            params: The LayerParameters for the current layer.
+            layer_id: The ID of the current layer.
+
+        Returns:
+            A string containing the generated Python script.
+        """
         return f'''# Layer {layer_id}: Data Transformation
 import pandas as pd
 import json
@@ -406,6 +654,15 @@ if __name__ == '__main__':
 '''
 
     def _generate_api_template(self, params: LayerParameters, layer_id: int) -> str:
+        """Generates a script for interacting with an API using requests.
+
+        Args:
+            params: The LayerParameters for the current layer.
+            layer_id: The ID of the current layer.
+
+        Returns:
+            A string containing the generated Python script.
+        """
         return f'''# Layer {layer_id}: API Interaction
 import requests
 import json
@@ -429,6 +686,15 @@ if __name__ == '__main__':
 '''
 
     def _generate_simple_template(self, params: LayerParameters, layer_id: int) -> str:
+        """Generates a script for simple, low-complexity processing.
+
+        Args:
+            params: The LayerParameters for the current layer.
+            layer_id: The ID of the current layer.
+
+        Returns:
+            A string containing the generated Python script.
+        """
         return f'''# Layer {layer_id}: Simple Processing
 import json
 
@@ -452,20 +718,39 @@ if __name__ == '__main__':
 # ============================================================================
 
 def _create_default_dict_list():
-    """Helper function for pickling defaultdict."""
+    """Provides a pickleable factory for creating a defaultdict of lists."""
     return defaultdict(list)
 
 class MetaLearner:
-    """Learns which optimization strategies work best for different task types."""
+    """Learns and selects optimal strategies for orchestration tasks.
+
+    This class maintains a history of task performance and uses an epsilon-greedy
+    strategy to balance exploiting the best-known strategies with exploring
+    new ones. This allows the system to adapt its approach over time based on
+    what has worked for similar projects in the past.
+    """
 
     def __init__(self, epsilon: float = 0.3):
+        """Initializes the MetaLearner.
+
+        Args:
+            epsilon (float): The exploration rate for the epsilon-greedy
+                strategy. A value of 0.3 means a 30% chance of exploring a
+                random strategy instead of exploiting the best-known one.
+        """
         self.epsilon = epsilon
         self.task_history: List[TaskMetadata] = []
         self.strategy_performance: Dict[str, Dict[str, List[float]]] = defaultdict(_create_default_dict_list)
         self.available_strategies = ["high_quality", "high_speed", "balanced"]
 
     def record_task(self, task: TaskMetadata):
-        """Record a task's execution for meta-learning."""
+        """Records the outcome of a completed task to refine its strategy.
+
+        Args:
+            task (TaskMetadata): A TaskMetadata object containing the details
+                and success metrics of the completed task. This data is used
+                to update the performance history of different strategies.
+        """
         self.task_history.append(task)
         strategy_key = self._infer_strategy(task.optimal_config)
         self.strategy_performance[task.project_type][strategy_key].append(
@@ -473,8 +758,21 @@ class MetaLearner:
         )
 
     def get_optimal_strategy(self, project_type: str, complexity: float) -> Dict[str, Any]:
-        """
-        Get the optimal strategy for a new task using an epsilon-greedy approach.
+        """Selects a strategy for a new task using an epsilon-greedy approach.
+
+        With probability epsilon, it will explore a random strategy. Otherwise,
+        it will exploit the strategy with the best historical performance for
+        the given project type.
+
+        Args:
+            project_type (str): The type of the project (e.g., 'data_pipeline')
+                for which to select a strategy.
+            complexity (float): The complexity of the project, used to scale
+                strategy parameters.
+
+        Returns:
+            Dict[str, Any]: A dictionary defining the selected strategy's
+                parameters (e.g., {'ga_generations': 10, 'rl_episodes': 5}).
         """
         # 1. Decide whether to explore or exploit
         if random.random() < self.epsilon:
@@ -501,7 +799,14 @@ class MetaLearner:
         return self._decode_strategy(best_strategy, complexity)
 
     def _infer_strategy(self, config: Dict[str, Any]) -> str:
-        """Infer the strategy from a configuration."""
+        """Infers the name of a strategy from its configuration parameters.
+
+        Args:
+            config: A dictionary of strategy parameters.
+
+        Returns:
+            The string name of the strategy.
+        """
         ga_gens = config.get('ga_generations', 10)
         rl_eps = config.get('rl_episodes', 5)
         if ga_gens > 20 and rl_eps > 10:
@@ -511,7 +816,15 @@ class MetaLearner:
         return "balanced"
 
     def _decode_strategy(self, strategy: str, complexity: float) -> Dict[str, Any]:
-        """Get a configuration from a strategy."""
+        """Gets a configuration dictionary for a given strategy name.
+
+        Args:
+            strategy: The name of the strategy.
+            complexity: The complexity of the project.
+
+        Returns:
+            A dictionary of parameters for the given strategy.
+        """
         strategies = {
             "high_quality": {'ga_generations': int(25 * complexity), 'rl_episodes': int(12 * complexity)},
             "high_speed": {'ga_generations': 5, 'rl_episodes': 3},
@@ -520,7 +833,14 @@ class MetaLearner:
         return strategies.get(strategy, strategies["balanced"])
 
     def _default_strategy(self, complexity: float) -> Dict[str, Any]:
-        """Get a default strategy for unknown project types."""
+        """Gets a default strategy for unknown project types.
+
+        Args:
+            complexity: The complexity of the project.
+
+        Returns:
+            A dictionary of parameters for the default strategy.
+        """
         return {'ga_generations': int(10 * complexity), 'rl_episodes': int(5 * complexity)}
 
 # ============================================================================
@@ -528,13 +848,25 @@ class MetaLearner:
 # ============================================================================
 
 class Verifier:
-    """Verifies the quality of a generated script."""
+    """Verifies the correctness of generated code.
+
+    This class provides methods to check for syntax and runtime errors in
+    both individual scripts and full pipelines.
+    """
 
     def verify_script(self, script_code: str) -> Dict[str, float]:
-        """
-        Verifies a script by saving it to a temporary file and executing it
-        as a subprocess. This provides a high-fidelity check for both syntax
-        and runtime errors.
+        """Verifies a single script for syntax and runtime errors.
+
+        This method first checks for syntax errors by attempting to compile the
+        code. If that succeeds, it saves the code to a temporary file and
+        executes it as a subprocess to check for runtime errors.
+
+        Args:
+            script_code: A string containing the Python code to verify.
+
+        Returns:
+            A dictionary containing 'syntax_ok', 'runtime_ok', and
+            'overall_quality' metrics.
         """
         metrics = {'syntax_ok': 0.0, 'runtime_ok': 0.0, 'overall_quality': 0.0}
 
@@ -580,9 +912,19 @@ class Verifier:
         return metrics
 
     def verify_pipeline(self, script_codes: List[str]) -> Dict[str, float]:
-        """
-        Verifies a full pipeline by executing scripts sequentially and passing
-        the context between them.
+        """Verifies a full pipeline of scripts.
+
+        This method executes a list of scripts sequentially, passing the JSON
+        output of each script as the input context to the next. This provides
+        a true end-to-end integration test of the generated pipeline.
+
+        Args:
+            script_codes: A list of strings, where each string is a
+                self-contained Python script.
+
+        Returns:
+            A dictionary containing the 'overall_quality' of the pipeline,
+            which is the proportion of scripts that executed successfully.
         """
         pipeline_context = {}
         total_quality = 0.0
