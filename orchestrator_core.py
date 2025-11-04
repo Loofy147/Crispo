@@ -8,6 +8,8 @@ import json
 import random
 import math
 import re
+import subprocess
+import tempfile
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
@@ -344,6 +346,13 @@ class Layer{layer_id}System:
         # Apply a non-linear transformation
         transformed_data = np.tanh(np.dot(data, self.weights.T) + self.biases)
         return transformed_data * self.temp
+
+if __name__ == '__main__':
+    system = Layer{layer_id}System()
+    # Example usage with mock data that matches the expected input shape
+    mock_data = np.random.rand(1, {len(params.weights)})
+    result = system.process(mock_data)
+    print(f"Layer {layer_id} processed result: {{result}}")
 '''
         elif complexity > 0.5:
             template = f'''# Layer {layer_id}: Data Transformation
@@ -354,6 +363,12 @@ def process_layer_{layer_id}(data):
     # Perform a simple data transformation
     df['new_col'] = df.iloc[:, 0] * {params.weights.get('execution', 1.0):.2f}
     return df.to_dict('records')
+
+if __name__ == '__main__':
+    # Example usage with mock data
+    mock_data = {{'col1': [1, 2, 3], 'col2': [4, 5, 6]}}
+    result = process_layer_{layer_id}(mock_data)
+    print(f"Layer {layer_id} processed result: {{result}}")
 '''
         elif complexity > 0.2:
             template = f'''# Layer {layer_id}: API Interaction
@@ -367,6 +382,12 @@ def process_layer_{layer_id}(api_endpoint):
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data: {{e}}")
         return None
+
+if __name__ == '__main__':
+    # Example usage with a mock API endpoint
+    mock_api = 'https://jsonplaceholder.typicode.com/todos/1'
+    result = process_layer_{layer_id}(mock_api)
+    print(f"Layer {layer_id} processed result: {{result}}")
 '''
         else:
             template = f'''# Layer {layer_id}: Simple Processing
@@ -374,6 +395,11 @@ def process_layer_{layer_id}(data):
     weight = {params.weights.get("execution", 1.0):.2f}
     bias = {params.biases.get("execution", 0.0):.2f}
     return data * weight + bias
+
+if __name__ == '__main__':
+    # Example usage with mock data
+    result = process_layer_{layer_id}(10)
+    print(f"Layer {layer_id} processed result: {{result}}")
 '''
         return template
 
@@ -462,31 +488,47 @@ class Verifier:
 
     def verify_script(self, script_code: str) -> Dict[str, float]:
         """
-        Verifies a script for syntax and runtime errors.
-        Returns a dictionary of success metrics.
+        Verifies a script by saving it to a temporary file and executing it
+        as a subprocess. This provides a high-fidelity check for both syntax
+        and runtime errors.
         """
-        metrics = {
-            'syntax_ok': 0.0,
-            'runtime_ok': 0.0,
-            'overall_quality': 0.0
-        }
+        metrics = {'syntax_ok': 0.0, 'runtime_ok': 0.0, 'overall_quality': 0.0}
 
-        # 1. Check for syntax errors
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write(script_code)
+            temp_filename = temp_file.name
+
         try:
-            compile(script_code, '<string>', 'exec')
-            metrics['syntax_ok'] = 1.0
-        except SyntaxError:
-            return metrics  # No point in trying to run if syntax is wrong
+            # Execute the script as a subprocess
+            result = subprocess.run(
+                ['python3', temp_filename],
+                capture_output=True,
+                text=True,
+                timeout=10 # Add a timeout to prevent long-running scripts
+            )
 
-        # 2. Check for basic runtime errors in a sandboxed environment
-        try:
-            exec(script_code, {})
-            metrics['runtime_ok'] = 1.0
-        except Exception:
-            # Any exception during execution is a failure
-            pass
+            # A non-zero return code indicates an error
+            if result.returncode == 0:
+                metrics['syntax_ok'] = 1.0
+                metrics['runtime_ok'] = 1.0
+            else:
+                # The script ran but exited with an error
+                metrics['syntax_ok'] = 1.0
+                metrics['runtime_ok'] = 0.0
 
-        # 3. Calculate overall quality
+        except FileNotFoundError:
+            # This can happen if the python3 interpreter is not found
+            print("Error: python3 interpreter not found.")
+
+        except subprocess.TimeoutExpired:
+            print(f"Verification timeout for script: {temp_filename}")
+
+        finally:
+            # Clean up the temporary file
+            import os
+            os.remove(temp_filename)
+
+        # Calculate overall quality
         metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
 
         return metrics
