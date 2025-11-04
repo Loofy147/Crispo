@@ -110,7 +110,7 @@ class OrchestratorAI:
         pipeline_context = {}  # Initialize the data pipeline context
 
         for i in range(3): # Generate 3 layers
-            script = self.code_generator.generate(final_params, i)
+            script = self.code_generator.generate(final_params, i, self.context.objective)
             generated_scripts.append(script)
             print(f"  - Generated Layer {i} with Temp={final_params.temperature:.2f}")
 

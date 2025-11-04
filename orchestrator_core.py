@@ -326,14 +326,40 @@ class AttentionRouter:
 # ============================================================================
 
 class CodeGenerator:
-    """Generates multi-layer scripts."""
+    """Generates multi-layer scripts with intent-based template selection."""
 
-    def generate(self, params: LayerParameters, layer_id: int) -> str:
-        """Generate a script for a single layer."""
+    def generate(self, params: LayerParameters, layer_id: int, objective: str) -> str:
+        """
+        Selects and generates a script for a single layer based on the
+        pipeline's objective and the current layer ID.
+        """
+        objective = objective.lower()
+
+        # Layer 0: Prioritize fetching data
+        if layer_id == 0 and any(kw in objective for kw in ['fetch', 'get', 'api', 'request']):
+            return self._generate_api_template(params, layer_id)
+
+        # Layer 1: Prioritize transformation
+        if layer_id == 1 and any(kw in objective for kw in ['process', 'transform', 'clean', 'pandas']):
+            return self._generate_transform_template(params, layer_id)
+
+        # Layer 2: Prioritize analysis
+        if layer_id == 2 and any(kw in objective for kw in ['analyze', 'numpy', 'compute', 'calculate']):
+            return self._generate_high_complexity_template(params, layer_id)
+
+        # Fallback to complexity-based logic if intent is not clear for the layer
         complexity = params.weights.get('complexity', 1.0)
-        
         if complexity > 0.8:
-            template = f'''# Layer {layer_id}: High-Complexity Data Processing
+            return self._generate_high_complexity_template(params, layer_id)
+        if complexity > 0.5:
+            return self._generate_transform_template(params, layer_id)
+        if complexity > 0.2:
+            return self._generate_api_template(params, layer_id)
+
+        return self._generate_simple_template(params, layer_id)
+
+    def _generate_high_complexity_template(self, params: LayerParameters, layer_id: int) -> str:
+        return f'''# Layer {layer_id}: High-Complexity Data Processing
 import numpy as np
 import json
 
@@ -357,8 +383,9 @@ if __name__ == '__main__':
     result = system.process(mock_input_context)
     print(json.dumps(result))
 '''
-        elif complexity > 0.5:
-            template = f'''# Layer {layer_id}: Data Transformation
+
+    def _generate_transform_template(self, params: LayerParameters, layer_id: int) -> str:
+        return f'''# Layer {layer_id}: Data Transformation
 import pandas as pd
 import json
 
@@ -377,13 +404,14 @@ if __name__ == '__main__':
     result = process_layer_{layer_id}(mock_input_context)
     print(json.dumps(result))
 '''
-        elif complexity > 0.2:
-            template = f'''# Layer {layer_id}: API Interaction
+
+    def _generate_api_template(self, params: LayerParameters, layer_id: int) -> str:
+        return f'''# Layer {layer_id}: API Interaction
 import requests
 import json
 
 def process_layer_{layer_id}(input_context):
-    api_endpoint = input_context.get('api_endpoint', '')
+    api_endpoint = input_context.get('api_endpoint', 'https://jsonplaceholder.typicode.com/todos/1')
     try:
         response = requests.get(api_endpoint, timeout=5)
         response.raise_for_status()
@@ -399,8 +427,9 @@ if __name__ == '__main__':
     result = process_layer_{layer_id}(mock_input_context)
     print(json.dumps(result))
 '''
-        else:
-            template = f'''# Layer {layer_id}: Simple Processing
+
+    def _generate_simple_template(self, params: LayerParameters, layer_id: int) -> str:
+        return f'''# Layer {layer_id}: Simple Processing
 import json
 
 def process_layer_{layer_id}(input_context):
@@ -417,7 +446,6 @@ if __name__ == '__main__':
     result = process_layer_{layer_id}(mock_input_context)
     print(json.dumps(result))
 '''
-        return template
 
 # ============================================================================
 # ADVANCED FEATURE: META-LEARNING
