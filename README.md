@@ -64,8 +64,9 @@ The system's `Verifier` will automatically evaluate the generated algorithm and 
 
 ### Generating a Learning-Augmented Algorithm
 
-To generate an LAA, simply specify the problem in the objective. For example:
+To generate an LAA, simply specify the problem in the objective. The system currently supports the **Ski Rental** and **One-Max Search** problems.
 
+#### Ski Rental Example
 ```bash
 python3 orchestrator.py \
     --objective "Generate a learning-augmented algorithm for the ski rental problem" \
@@ -73,7 +74,15 @@ python3 orchestrator.py \
     --save-metaknowledge laa_knowledge.pkl
 ```
 
-This will produce a single, executable Python script that implements the learning-augmented ski rental algorithm. The `--trust-parameter` (lambda) allows you to control the trade-off between trusting the ML prediction and falling back on the robust classical strategy.
+#### One-Max Search Example
+```bash
+python3 orchestrator.py \
+    --objective "Generate a learning-augmented algorithm for the one-max search problem" \
+    --trust-parameter 0.7 \
+    --save-metaknowledge laa_knowledge.pkl
+```
+
+This will produce a single, executable Python script that implements the specified learning-augmented algorithm. The `--trust-parameter` (lambda) allows you to control the trade-off between trusting the ML prediction and falling back on the robust classical strategy.
 
 The system's `Verifier` will automatically evaluate the generated algorithm and output its measured consistency and robustness, which are then recorded by the `MetaLearner`.
 

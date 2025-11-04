@@ -341,6 +341,34 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         sorted_ratios = [v for k, v in sorted(profile.items())]
         self.assertTrue(all(sorted_ratios[i] <= sorted_ratios[i+1] for i in range(len(sorted_ratios)-1)))
 
+    def test_one_max_laa_pipeline(self):
+        """Test the end-to-end pipeline for the One-Max Search LAA."""
+        context = OrchestrationContext(
+            project="OneMaxLAA",
+            objective="Generate a learning-augmented algorithm for the one-max search problem"
+        )
+        meta_learner = MetaLearner(epsilon=0.0)
+        orchestrator = OrchestratorAI(context, meta_learner)
+
+        final_scripts = orchestrator.orchestrate(
+            project_type="laa_one_max",
+            domain="online_algorithms",
+            complexity=0.5,
+            enable_transfer_learning=False,
+            enable_nas=False,
+            enable_federated_optimization=False,
+            trust_parameter=0.8
+        )
+
+        self.assertEqual(len(final_scripts), 1)
+        self.assertIn("def one_max_algorithm", final_scripts[0])
+
+        self.assertEqual(len(meta_learner.task_history), 1)
+        task_record = meta_learner.task_history[0]
+        self.assertIn('consistency', task_record.success_metrics)
+        self.assertIn('robustness', task_record.success_metrics)
+        self.assertIn('smoothness_profile', task_record.success_metrics)
+
 
 if __name__ == '__main__':
     unittest.main()

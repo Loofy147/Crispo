@@ -18,7 +18,9 @@ from orchestrator_core import (
     CodeGenerator,
     MetaLearner,
     TaskMetadata,
-    Verifier
+    Verifier,
+    SkiRentalContext,
+    OneMaxSearchContext
 )
 from advanced_orchestrator import (
     TransferLearningEngine,
@@ -145,10 +147,11 @@ class OrchestratorAI:
         pipeline_context = {}  # Initialize the data pipeline context
 
         # If it's a learning-augmented algorithm, generate one script
-        if "ski rental" in self.context.objective.lower():
+        objective = self.context.objective.lower()
+        if "ski rental" in objective or "one-max search" in objective:
             script = self.code_generator.generate(final_params, 0, self.context.objective, trust_parameter)
             generated_scripts.append(script)
-            print("  - Generated Learning-Augmented Algorithm Script for Ski Rental")
+            print("  - Generated Learning-Augmented Algorithm Script")
         else:
             for i in range(3): # Generate 3 layers for a standard pipeline
                 script = self.code_generator.generate(final_params, i, self.context.objective, trust_parameter)
@@ -162,13 +165,20 @@ class OrchestratorAI:
         print("\n🔬 PHASE 4: Verification and Feedback")
 
         # If it's a learning-augmented algorithm, use the new evaluation method
-        if "ski rental" in self.context.objective.lower():
+        objective = self.context.objective.lower()
+        problem_context = None
+        if "ski rental" in objective:
+            problem_context = SkiRentalContext()
+        elif "one-max search" in objective:
+            problem_context = OneMaxSearchContext()
+
+        if problem_context:
             laa_script = generated_scripts[0]
             error_levels = [0.1, 0.25, 0.5, 0.75, 1.0] # Define error levels to test
             laa_metrics = self.verifier.evaluate_learning_augmented_algorithm(
                 script_code=laa_script,
                 trust_parameter=trust_parameter,
-                problem_params={'buy_cost': 100},
+                problem_context=problem_context,
                 error_levels=error_levels
             )
             print(f"  - LAA Consistency (Error=0%): {laa_metrics['consistency']:.2f}-competitive")

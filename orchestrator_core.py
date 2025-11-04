@@ -569,8 +569,9 @@ class CodeGenerator:
 
         # Check for LAA-specific objectives first
         if "ski rental" in objective:
-            # For LAA, we generate a single, complete script instead of a layer
             return self._generate_ski_rental_laa_template(params, trust_parameter)
+        if "one-max search" in objective:
+            return self._generate_one_max_laa_template(params, trust_parameter)
 
         # Layer 0: Prioritize fetching data
         if layer_id == 0 and any(kw in objective for kw in ['fetch', 'get', 'api', 'request']):
@@ -657,6 +658,66 @@ def main():
         "algorithm_cost": alg_cost,
         "optimal_cost": opt_cost,
         "competitive_ratio": alg_cost / opt_cost if opt_cost > 0 else 1
+    }}
+    print(json.dumps(output))
+
+if __name__ == "__main__":
+    main()
+'''
+
+    def _generate_one_max_laa_template(self, params: LayerParameters, trust_parameter: float) -> str:
+        """Generates a script for the One-Max Search problem using a learning-augmented algorithm."""
+        return f'''"""
+Learning-Augmented Algorithm for the One-Max Search Problem
+"""
+import sys
+import json
+import ast
+
+def one_max_algorithm(sequence, prediction_max, trust_lambda):
+    """
+    Executes the learning-augmented one-max search algorithm.
+    Accepts the first value that meets a blended threshold.
+
+    Args:
+        sequence (List[int]): The sequence of values observed.
+        prediction_max (int): The predicted maximum value in the sequence.
+        trust_lambda (float): The trust parameter (lambda) between 0 and 1.
+
+    Returns:
+        int: The value selected by the algorithm.
+    """
+    # A simple threshold: blend the prediction with a safe "accept anything" (0)
+    threshold = trust_lambda * prediction_max
+
+    for value in sequence:
+        if value >= threshold:
+            return value
+
+    # If no value meets the threshold, accept the last one (a robust strategy)
+    return sequence[-1] if sequence else 0
+
+def calculate_optimal_cost(sequence):
+    """Calculates the optimal offline cost (the true maximum)."""
+    return max(sequence) if sequence else 0
+
+def main():
+    """Main execution function."""
+    if len(sys.argv) != 4:
+        print("Usage: python one_max.py '<sequence>' <prediction_max> <trust_lambda>")
+        sys.exit(1)
+
+    sequence = ast.literal_eval(sys.argv[1])
+    prediction_max = int(sys.argv[2])
+    trust_lambda = float(sys.argv[3])
+
+    alg_value = one_max_algorithm(sequence, prediction_max, trust_lambda)
+    opt_value = calculate_optimal_cost(sequence)
+
+    output = {{
+        "algorithm_cost": alg_value, # In One-Max, "cost" is the value selected
+        "optimal_cost": opt_value,
+        "competitive_ratio": opt_value / alg_value if alg_value > 0 else float('inf')
     }}
     print(json.dumps(output))
 
@@ -923,6 +984,66 @@ class MetaLearner:
 # VERIFICATION UNIT
 # ============================================================================
 
+class ProblemContext:
+    """Abstract base class for a problem context, used by the Verifier."""
+    def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
+        raise NotImplementedError
+
+    def get_perfect_prediction(self, scenario):
+        raise NotImplementedError
+
+    def get_worst_prediction(self, scenario):
+        raise NotImplementedError
+
+    def get_noisy_prediction(self, scenario, error_level):
+        raise NotImplementedError
+
+    def get_scenarios(self):
+        raise NotImplementedError
+
+class SkiRentalContext(ProblemContext):
+    """Problem context for the Ski Rental problem."""
+    def __init__(self, buy_cost=100):
+        self.buy_cost = buy_cost
+
+    def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
+        actual_days = scenario
+        return ['python3', script_path, str(self.buy_cost), str(prediction), str(trust_parameter), str(actual_days)]
+
+    def get_perfect_prediction(self, scenario):
+        return scenario
+
+    def get_worst_prediction(self, scenario):
+        return 1
+
+    def get_noisy_prediction(self, scenario, error_level):
+        perfect = self.get_perfect_prediction(scenario)
+        return max(1, int(perfect * (1 + error_level)))
+
+    def get_scenarios(self):
+        return range(1, self.buy_cost * 2)
+
+class OneMaxSearchContext(ProblemContext):
+    """Problem context for the One-Max Search problem."""
+    def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
+        sequence = scenario
+        return ['python3', script_path, str(sequence), str(prediction), str(trust_parameter)]
+
+    def get_perfect_prediction(self, scenario):
+        return max(scenario) if scenario else 0
+
+    def get_worst_prediction(self, scenario):
+        return min(scenario) if scenario else 0
+
+    def get_noisy_prediction(self, scenario, error_level):
+        perfect = self.get_perfect_prediction(scenario)
+        return int(perfect * (1 - error_level))
+
+    def get_scenarios(self):
+        # Generate some random sequences for evaluation
+        return [random.sample(range(1, 100), 10) for _ in range(20)]
+
+
 class Verifier:
     """Verifies the correctness of generated code.
 
@@ -1041,31 +1162,26 @@ class Verifier:
         self,
         script_code: str,
         trust_parameter: float,
-        problem_params: Dict[str, Any],
+        problem_context: ProblemContext,
         error_levels: List[float]
     ) -> Dict[str, Any]:
         """
-        Evaluates a learning-augmented algorithm for consistency, robustness, and smoothness.
-
-        This method runs the generated script under various scenarios to measure its performance.
+        Evaluates a learning-augmented algorithm using a problem-agnostic context.
 
         Args:
             script_code (str): The Python code of the LAA.
             trust_parameter (float): The lambda value for the algorithm.
-            problem_params (Dict[str, Any]): Parameters for the problem,
-                e.g., {'buy_cost': 100} for ski rental.
+            problem_context (ProblemContext): The context defining the problem,
+                scenarios, and prediction logic.
             error_levels (List[float]): A list of prediction error levels to
-                test for the smoothness profile (e.g., [0.1, 0.2, ...]).
+                test for the smoothness profile.
 
         Returns:
             Dict[str, Any]: A dictionary containing 'consistency', 'robustness',
                 and 'smoothness_profile'.
         """
         metrics = {'consistency': 0.0, 'robustness': 0.0, 'smoothness_profile': {}}
-        buy_cost = problem_params.get('buy_cost', 100)
-
-        consistency_ratios = []
-        robustness_ratios = []
+        consistency_ratios, robustness_ratios = [], []
         smoothness_ratios = {level: [] for level in error_levels}
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
@@ -1073,34 +1189,28 @@ class Verifier:
             temp_filename = temp_file.name
 
         try:
-            for actual_days in range(1, buy_cost * 2):
+            for scenario in problem_context.get_scenarios():
                 # 1. Evaluate Consistency
-                perfect_prediction = actual_days
-                result = subprocess.run(
-                    ['python3', temp_filename, str(buy_cost), str(perfect_prediction), str(trust_parameter), str(actual_days)],
-                    capture_output=True, text=True, timeout=10
-                )
+                perfect_prediction = problem_context.get_perfect_prediction(scenario)
+                cmd = problem_context.get_evaluation_command(temp_filename, perfect_prediction, trust_parameter, scenario)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     output = json.loads(result.stdout)
                     consistency_ratios.append(output['competitive_ratio'])
 
                 # 2. Evaluate Robustness
-                worst_prediction = 1
-                result = subprocess.run(
-                    ['python3', temp_filename, str(buy_cost), str(worst_prediction), str(trust_parameter), str(actual_days)],
-                    capture_output=True, text=True, timeout=10
-                )
+                worst_prediction = problem_context.get_worst_prediction(scenario)
+                cmd = problem_context.get_evaluation_command(temp_filename, worst_prediction, trust_parameter, scenario)
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     output = json.loads(result.stdout)
                     robustness_ratios.append(output['competitive_ratio'])
 
                 # 3. Evaluate Smoothness
                 for error in error_levels:
-                    noisy_prediction = max(1, int(perfect_prediction * (1 + error)))
-                    result = subprocess.run(
-                        ['python3', temp_filename, str(buy_cost), str(noisy_prediction), str(trust_parameter), str(actual_days)],
-                        capture_output=True, text=True, timeout=10
-                    )
+                    noisy_prediction = problem_context.get_noisy_prediction(scenario, error)
+                    cmd = problem_context.get_evaluation_command(temp_filename, noisy_prediction, trust_parameter, scenario)
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                     if result.returncode == 0:
                         output = json.loads(result.stdout)
                         smoothness_ratios[error].append(output['competitive_ratio'])
@@ -1112,7 +1222,6 @@ class Verifier:
             for error in error_levels:
                 if smoothness_ratios[error]:
                     metrics['smoothness_profile'][error] = max(smoothness_ratios[error])
-
         finally:
             import os
             os.remove(temp_filename)
