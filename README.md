@@ -84,7 +84,7 @@ python3 orchestrator.py \
 
 This will produce a single, executable Python script that implements the specified learning-augmented algorithm. The `--trust-parameter` (lambda) allows you to control the trade-off between trusting the ML prediction and falling back on the robust classical strategy.
 
-The system's `Verifier` will automatically evaluate the generated algorithm and output its measured consistency and robustness, which are then recorded by the `MetaLearner`.
+A key feature of OrchestratorAI is its use of **Uncertainty-Quantified (UQ) Predictions**. Instead of relying on a single point prediction, the generated algorithms operate on a prediction *interval* (e.g., "the value will be between 90 and 110"). This makes the algorithms more robust to the inevitable errors in ML predictions, a principle drawn directly from the latest research.
 
 ### Example
 

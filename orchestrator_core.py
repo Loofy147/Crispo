@@ -604,21 +604,25 @@ Learning-Augmented Algorithm for the Ski Rental Problem
 import sys
 import json
 
-def ski_rental_algorithm(B, prediction_days, trust_lambda, actual_days):
+def ski_rental_algorithm(B, prediction_interval, trust_lambda, actual_days):
     """
-    Executes the learning-augmented ski rental algorithm.
+    Executes the UQ-aware learning-augmented ski rental algorithm.
 
     Args:
         B (int): The cost to buy skis.
-        prediction_days (int): The predicted number of skiing days.
+        prediction_interval (List[int]): The predicted [lower, upper] bound
+            of skiing days.
         trust_lambda (float): The trust parameter (lambda) between 0 and 1.
         actual_days (int): The actual number of skiing days.
 
     Returns:
         int: The total cost incurred by the algorithm.
     """
+    # Use the upper bound of the interval for a more robust threshold
+    prediction_upper_bound = prediction_interval[1]
+
     # The core of the learning-augmented algorithm: a blended threshold
-    threshold = (1 - trust_lambda) * B + trust_lambda * min(prediction_days, B)
+    threshold = (1 - trust_lambda) * B + trust_lambda * min(prediction_upper_bound, B)
 
     cost = 0
     bought_skis = False
@@ -643,15 +647,15 @@ def calculate_optimal_cost(B, actual_days):
 def main():
     """Main execution function."""
     if len(sys.argv) != 5:
-        print("Usage: python ski_rental.py <buy_cost> <prediction_days> <trust_lambda> <actual_days>")
+        print("Usage: python ski_rental.py <buy_cost> '<prediction_interval>' <trust_lambda> <actual_days>")
         sys.exit(1)
 
     B = int(sys.argv[1])
-    prediction_days = int(sys.argv[2])
+    prediction_interval = json.loads(sys.argv[2])
     trust_lambda = float(sys.argv[3])
     actual_days = int(sys.argv[4])
 
-    alg_cost = ski_rental_algorithm(B, prediction_days, trust_lambda, actual_days)
+    alg_cost = ski_rental_algorithm(B, prediction_interval, trust_lambda, actual_days)
     opt_cost = calculate_optimal_cost(B, actual_days)
 
     output = {{
@@ -674,21 +678,23 @@ import sys
 import json
 import ast
 
-def one_max_algorithm(sequence, prediction_max, trust_lambda):
+def one_max_algorithm(sequence, prediction_interval, trust_lambda):
     """
-    Executes the learning-augmented one-max search algorithm.
-    Accepts the first value that meets a blended threshold.
+    Executes the UQ-aware learning-augmented one-max search algorithm.
 
     Args:
         sequence (List[int]): The sequence of values observed.
-        prediction_max (int): The predicted maximum value in the sequence.
+        prediction_interval (List[int]): The predicted [lower, upper] bound
+            of the maximum value.
         trust_lambda (float): The trust parameter (lambda) between 0 and 1.
 
     Returns:
         int: The value selected by the algorithm.
     """
-    # A simple threshold: blend the prediction with a safe "accept anything" (0)
-    threshold = trust_lambda * prediction_max
+    # Use the lower bound of the interval for a more conservative threshold
+    prediction_lower_bound = prediction_interval[0]
+
+    threshold = trust_lambda * prediction_lower_bound
 
     for value in sequence:
         if value >= threshold:
@@ -704,14 +710,14 @@ def calculate_optimal_cost(sequence):
 def main():
     """Main execution function."""
     if len(sys.argv) != 4:
-        print("Usage: python one_max.py '<sequence>' <prediction_max> <trust_lambda>")
+        print("Usage: python one_max.py '<sequence>' '<prediction_interval>' <trust_lambda>")
         sys.exit(1)
 
     sequence = ast.literal_eval(sys.argv[1])
-    prediction_max = int(sys.argv[2])
+    prediction_interval = ast.literal_eval(sys.argv[2])
     trust_lambda = float(sys.argv[3])
 
-    alg_value = one_max_algorithm(sequence, prediction_max, trust_lambda)
+    alg_value = one_max_algorithm(sequence, prediction_interval, trust_lambda)
     opt_value = calculate_optimal_cost(sequence)
 
     output = {{
@@ -1011,14 +1017,19 @@ class SkiRentalContext(ProblemContext):
         return ['python3', script_path, str(self.buy_cost), str(prediction), str(trust_parameter), str(actual_days)]
 
     def get_perfect_prediction(self, scenario):
-        return scenario
+        # Perfect UQ prediction is a tight interval around the true value
+        return [scenario, scenario]
 
     def get_worst_prediction(self, scenario):
-        return 1
+        # Worst-case is a misleading interval
+        return [1, 2]
 
     def get_noisy_prediction(self, scenario, error_level):
+        # Noisy prediction widens the interval based on error
         perfect = self.get_perfect_prediction(scenario)
-        return max(1, int(perfect * (1 + error_level)))
+        lower_bound = max(1, int(perfect[0] * (1 - error_level)))
+        upper_bound = int(perfect[1] * (1 + error_level))
+        return [lower_bound, upper_bound]
 
     def get_scenarios(self):
         return range(1, self.buy_cost * 2)
@@ -1030,14 +1041,18 @@ class OneMaxSearchContext(ProblemContext):
         return ['python3', script_path, str(sequence), str(prediction), str(trust_parameter)]
 
     def get_perfect_prediction(self, scenario):
-        return max(scenario) if scenario else 0
+        true_max = max(scenario) if scenario else 0
+        return [true_max, true_max]
 
     def get_worst_prediction(self, scenario):
-        return min(scenario) if scenario else 0
+        true_min = min(scenario) if scenario else 0
+        return [true_min, true_min]
 
     def get_noisy_prediction(self, scenario, error_level):
-        perfect = self.get_perfect_prediction(scenario)
-        return int(perfect * (1 - error_level))
+        perfect = self.get_perfect_prediction(scenario)[0]
+        lower_bound = int(perfect * (1 - error_level))
+        upper_bound = int(perfect * (1 + error_level))
+        return [lower_bound, upper_bound]
 
     def get_scenarios(self):
         # Generate some random sequences for evaluation
@@ -1192,7 +1207,7 @@ class Verifier:
             for scenario in problem_context.get_scenarios():
                 # 1. Evaluate Consistency
                 perfect_prediction = problem_context.get_perfect_prediction(scenario)
-                cmd = problem_context.get_evaluation_command(temp_filename, perfect_prediction, trust_parameter, scenario)
+                cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(perfect_prediction), trust_parameter, scenario)
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     output = json.loads(result.stdout)
@@ -1200,7 +1215,7 @@ class Verifier:
 
                 # 2. Evaluate Robustness
                 worst_prediction = problem_context.get_worst_prediction(scenario)
-                cmd = problem_context.get_evaluation_command(temp_filename, worst_prediction, trust_parameter, scenario)
+                cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(worst_prediction), trust_parameter, scenario)
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     output = json.loads(result.stdout)
@@ -1209,7 +1224,7 @@ class Verifier:
                 # 3. Evaluate Smoothness
                 for error in error_levels:
                     noisy_prediction = problem_context.get_noisy_prediction(scenario, error)
-                    cmd = problem_context.get_evaluation_command(temp_filename, noisy_prediction, trust_parameter, scenario)
+                    cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(noisy_prediction), trust_parameter, scenario)
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                     if result.returncode == 0:
                         output = json.loads(result.stdout)
