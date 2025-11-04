@@ -35,14 +35,17 @@ class TestAdvancedFeatures(unittest.TestCase):
         )
 
     def test_federated_optimizer(self):
-        """Ensure the placeholder Federated Optimizer returns the model unmodified."""
+        """Ensure the Federated Optimizer returns a modified model."""
         fo = FederatedOptimizer(num_clients=5)
-        optimized_params = fo.optimize(self.params)
-        self.assertEqual(optimized_params, self.params)
+        client_data_sizes = [100] * 5
+        optimized_params = fo.optimize(self.params, client_data_sizes)
+        # Check that the returned object is a different instance
+        self.assertIsNot(optimized_params, self.params)
+        # Check that weights have been modified
+        self.assertNotEqual(optimized_params.weights, self.params.weights)
 
 class TestVerifier(unittest.TestCase):
     """Tests for the Verifier component."""
-
     def setUp(self):
         """Initialize the Verifier."""
         self.verifier = Verifier()
@@ -311,7 +314,8 @@ class TestOrchestratorIntegration(unittest.TestCase):
         # 3. Verify that the model registry was written to
         self.assertTrue(os.path.exists("model_registry.log"))
         with open("model_registry.log", 'r') as f:
-            log_entry = json.loads(f.read())
+            # Read the first line of the log file
+            log_entry = json.loads(f.readline())
             self.assertEqual(log_entry['model_path'], model_path)
 
         # 4. Clean up artifacts

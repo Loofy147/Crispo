@@ -10,6 +10,8 @@ import math
 import re
 import subprocess
 import tempfile
+import sys
+import resource
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
@@ -362,7 +364,35 @@ class RLAgent:
                 best_reward = episode_reward
                 best_params = params.clone()
 
+            self.prune_q_table()
+
         return best_params
+
+    def prune_q_table(self, keep_top_n: int = 1000):
+        """
+        Prunes the Q-table to prevent unbounded growth, keeping only the
+        entries with the highest Q-values.
+        """
+        if not self.q_table:
+            return
+
+        # Flatten the Q-table into a list of (state, action, q_value) tuples
+        all_pairs = []
+        for state, actions in self.q_table.items():
+            for action, q_val in actions.items():
+                all_pairs.append((state, action, q_val))
+
+        # Sort by Q-value in descending order
+        all_pairs.sort(key=lambda x: x[2], reverse=True)
+
+        # Rebuild the Q-table with only the top N pairs
+        pruned_q_table = {}
+        for state, action, q_val in all_pairs[:keep_top_n]:
+            if state not in pruned_q_table:
+                pruned_q_table[state] = {}
+            pruned_q_table[state][action] = q_val
+
+        self.q_table = pruned_q_table
 
     def _encode_state(self, params: LayerParameters, context: Dict) -> str:
         """Encodes the current state into a string for Q-table lookup.
@@ -1125,6 +1155,27 @@ class OneMaxSearchContext(ProblemContext):
         return [random.sample(range(1, 100), 10) for _ in range(20)]
 
 
+def set_resource_limits():
+    """Sets memory limits for subprocesses to prevent resource exhaustion."""
+    # Set maximum virtual memory to 500 MB
+    resource.setrlimit(resource.RLIMIT_AS, (500 * 1024 * 1024, 500 * 1024 * 1024))
+
+def safe_write(filename: str, content: str, allowed_dir: str = "/app"):
+    """
+    Safely writes content to a file, ensuring it's within an allowed directory.
+    """
+    import os
+
+    filepath = os.path.join(allowed_dir, os.path.basename(filename))
+
+    # Final check to prevent any directory traversal
+    if '..' in filepath or not filepath.startswith(allowed_dir):
+        raise ValueError("Invalid filename provided for safe write.")
+
+    with open(filepath, 'w') as f:
+        f.write(content)
+    return filepath
+
 class Verifier:
     """Verifies the correctness of generated code.
 
@@ -1155,17 +1206,19 @@ class Verifier:
         except SyntaxError:
             return metrics  # No point in trying to run if syntax is wrong
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
-            temp_file.write(script_code)
-            temp_filename = temp_file.name
+        temp_filename = "temp_script.py"
+        safe_filepath = safe_write(temp_filename, script_code)
+
+        preexec_fn = set_resource_limits if sys.platform != "win32" else None
 
         try:
             # Execute the script as a subprocess
             result = subprocess.run(
-                ['python3', temp_filename],
+                ['python3', safe_filepath],
                 capture_output=True,
                 text=True,
-                timeout=10 # Add a timeout to prevent long-running scripts
+                timeout=10, # Add a timeout to prevent long-running scripts
+                preexec_fn=preexec_fn
             )
 
             # A non-zero return code indicates a runtime error
@@ -1177,12 +1230,13 @@ class Verifier:
             print("Error: python3 interpreter not found.")
 
         except subprocess.TimeoutExpired:
-            print(f"Verification timeout for script: {temp_filename}")
+            print(f"Verification timeout for script: {safe_filepath}")
 
         finally:
             # Clean up the temporary file
             import os
-            os.remove(temp_filename)
+            if os.path.exists(safe_filepath):
+                os.remove(safe_filepath)
 
         # Calculate overall quality
         metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
@@ -1207,20 +1261,20 @@ class Verifier:
         pipeline_context = {}
         total_quality = 0.0
         num_scripts = len(script_codes)
+        preexec_fn = set_resource_limits if sys.platform != "win32" else None
 
         for i, script_code in enumerate(script_codes):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
-                # Inject the input context into the script
-                injected_code = f"import json\npipeline_context = {json.dumps(pipeline_context)}\n" + script_code
-                temp_file.write(injected_code)
-                temp_filename = temp_file.name
+            injected_code = f"import json\npipeline_context = {json.dumps(pipeline_context)}\n" + script_code
+            temp_filename = f"temp_pipeline_step_{i}.py"
+            safe_filepath = safe_write(temp_filename, injected_code)
 
             try:
                 result = subprocess.run(
-                    ['python3', temp_filename],
+                    ['python3', safe_filepath],
                     capture_output=True,
                     text=True,
-                    timeout=15
+                    timeout=15,
+                    preexec_fn=preexec_fn
                 )
 
                 if result.returncode == 0:
@@ -1234,7 +1288,8 @@ class Verifier:
 
             finally:
                 import os
-                os.remove(temp_filename)
+                if os.path.exists(safe_filepath):
+                    os.remove(safe_filepath)
 
         final_quality = total_quality / num_scripts if num_scripts > 0 else 0.0
         return {'overall_quality': final_quality}
