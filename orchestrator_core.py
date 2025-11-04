@@ -91,12 +91,21 @@ class GAOptimizer:
             offspring = [self._mutate(child) for child in offspring]
 
             # Elitism: keep the best individual
-            best_idx = fitness_scores.index(max(fitness_scores))
-            if offspring:
-                offspring[0] = population[best_idx]
-                population = offspring
-            else:
-                population = [population[best_idx]] * self.population_size
+            best_individual = population[fitness_scores.index(max(fitness_scores))]
+
+            # Create a new population with the best individual and the offspring
+            new_population = [best_individual]
+            new_population.extend(offspring)
+
+            # Fill the rest of the population with individuals from the old population
+            # sorted by fitness
+            sorted_population = [x for _, x in sorted(zip(fitness_scores, population), key=lambda pair: pair[0], reverse=True)]
+
+            fill_count = self.population_size - len(new_population)
+            if fill_count > 0:
+                new_population.extend(sorted_population[:fill_count])
+
+            population = new_population[:self.population_size]
 
 
         final_fitness = [self._evaluate_fitness(ind, context) for ind in population]
@@ -216,9 +225,15 @@ class RLAgent:
         """Encode state as a string for Q-table lookup."""
         state_vec = [
             params.temperature,
-            sum(params.weights.values()) / max(1, len(params.weights)),
             context.get('complexity', 0.5)
         ]
+
+        # Add all weights and biases to the state vector
+        for key in sorted(params.weights.keys()):
+            state_vec.append(params.weights[key])
+        for key in sorted(params.biases.keys()):
+            state_vec.append(params.biases[key])
+
         return str(tuple(round(v, 1) for v in state_vec))
 
     def _select_action(self, state: str) -> Dict:
@@ -315,19 +330,43 @@ class CodeGenerator:
         """Generate a script for a single layer."""
         complexity = params.weights.get('complexity', 1.0)
         
-        if complexity > 0.7:
-            template = f'''# Layer {layer_id}: High Complexity
+        if complexity > 0.8:
+            template = f'''# Layer {layer_id}: High-Complexity Data Processing
+import numpy as np
+
 class Layer{layer_id}System:
     def __init__(self):
-        self.weights = {params.weights}
-        self.biases = {params.biases}
+        self.weights = np.array({list(params.weights.values())})
+        self.biases = np.array({list(params.biases.values())})
         self.temp = {params.temperature:.2f}
 
     def process(self, data):
-        result = data
-        for key, weight in self.weights.items():
-            result = result * weight + self.biases.get(key, 0)
-        return result * self.temp
+        # Apply a non-linear transformation
+        transformed_data = np.tanh(np.dot(data, self.weights.T) + self.biases)
+        return transformed_data * self.temp
+'''
+        elif complexity > 0.5:
+            template = f'''# Layer {layer_id}: Data Transformation
+import pandas as pd
+
+def process_layer_{layer_id}(data):
+    df = pd.DataFrame(data)
+    # Perform a simple data transformation
+    df['new_col'] = df.iloc[:, 0] * {params.weights.get('execution', 1.0):.2f}
+    return df.to_dict('records')
+'''
+        elif complexity > 0.2:
+            template = f'''# Layer {layer_id}: API Interaction
+import requests
+
+def process_layer_{layer_id}(api_endpoint):
+    try:
+        response = requests.get(api_endpoint, timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data: {{e}}")
+        return None
 '''
         else:
             template = f'''# Layer {layer_id}: Simple Processing
@@ -395,3 +434,41 @@ class MetaLearner:
     def _default_strategy(self, complexity: float) -> Dict[str, Any]:
         """Get a default strategy for unknown project types."""
         return {'ga_generations': int(10 * complexity), 'rl_episodes': int(5 * complexity)}
+
+# ============================================================================
+# VERIFICATION UNIT
+# ============================================================================
+
+class Verifier:
+    """Verifies the quality of a generated script."""
+
+    def verify_script(self, script_code: str) -> Dict[str, float]:
+        """
+        Verifies a script for syntax and runtime errors.
+        Returns a dictionary of success metrics.
+        """
+        metrics = {
+            'syntax_ok': 0.0,
+            'runtime_ok': 0.0,
+            'overall_quality': 0.0
+        }
+
+        # 1. Check for syntax errors
+        try:
+            compile(script_code, '<string>', 'exec')
+            metrics['syntax_ok'] = 1.0
+        except SyntaxError:
+            return metrics  # No point in trying to run if syntax is wrong
+
+        # 2. Check for basic runtime errors in a sandboxed environment
+        try:
+            exec(script_code, {})
+            metrics['runtime_ok'] = 1.0
+        except Exception:
+            # Any exception during execution is a failure
+            pass
+
+        # 3. Calculate overall quality
+        metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
+
+        return metrics

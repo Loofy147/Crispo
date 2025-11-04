@@ -4,6 +4,8 @@ OrchestratorAI: Autonomous Multi-Layer Script Orchestration System
 """
 
 import argparse
+import pickle
+import random
 from typing import Dict, List, Any
 from datetime import datetime
 
@@ -15,7 +17,13 @@ from orchestrator_core import (
     AttentionRouter,
     CodeGenerator,
     MetaLearner,
-    TaskMetadata
+    TaskMetadata,
+    Verifier
+)
+from advanced_orchestrator import (
+    TransferLearningEngine,
+    NeuralArchitectureSearch,
+    FederatedOptimizer
 )
 
 # ============================================================================
@@ -32,8 +40,25 @@ class OrchestratorAI:
         self.attention_router = AttentionRouter()
         self.code_generator = CodeGenerator()
         self.meta_learner = meta_learner
+        self.verifier = Verifier()
 
-    def orchestrate(self, project_type: str, domain: str, complexity: float) -> List[str]:
+        # Initialize advanced components
+        self.transfer_learning_engine = TransferLearningEngine(model_store={})
+        self.neural_architecture_search = NeuralArchitectureSearch(search_space={
+            'layer_type': ['dense', 'conv'],
+            'activation': ['relu', 'tanh']
+        })
+        self.federated_optimizer = FederatedOptimizer(num_clients=10)
+
+    def orchestrate(
+        self,
+        project_type: str,
+        domain: str,
+        complexity: float,
+        enable_transfer_learning: bool,
+        enable_nas: bool,
+        enable_federated_optimization: bool
+    ) -> List[str]:
         """Execute the full orchestration pipeline."""
         print("🚀 " + "="*68)
         print("ORCHESTRATOR AI: AUTONOMOUS EXECUTION")
@@ -47,6 +72,10 @@ class OrchestratorAI:
         episodes = strategy.get('rl_episodes', 5)
 
         print(f"🧠 Meta-Learner Strategy: GA Gens={generations}, RL Eps={episodes}")
+
+        # Advanced features
+        if enable_nas:
+            self.neural_architecture_search.search(num_layers=3)
 
         # Define a template for layer parameters
         template_params = LayerParameters(
@@ -64,6 +93,9 @@ class OrchestratorAI:
             generations=generations
         )
 
+        if enable_transfer_learning:
+            evolved_params = self.transfer_learning_engine.apply(evolved_params, project_type)
+
         # Phase 2: Fine-tune parameters with RL
         print("\n🎯 PHASE 2: Reinforcement Learning Fine-Tuning")
         final_params = self.rl_agent.execute(
@@ -72,13 +104,50 @@ class OrchestratorAI:
             episodes=episodes
         )
 
-        # Phase 3: Generate code for multiple layers
-        print("\n💻 PHASE 3: Multi-Layer Script Generation")
+        # Phase 3: Generate code for multiple layers with attention
+        print("\n💻 PHASE 3: Multi-Layer Script Generation with Attention")
         generated_scripts = []
+        layer_outputs = []  # Store outputs for attention mechanism
+
+        # Initial query for the first layer (can be based on complexity)
+        query = [complexity] * 16  # embed_dim = 16
+
         for i in range(3): # Generate 3 layers
+            # Use attention to refine parameters for the current layer
+            if layer_outputs:
+                keys = values = layer_outputs
+                attention_result = self.attention_router.execute(query, keys, values)
+
+                # Update parameters based on attention output
+                attention_weights = attention_result['attention_weights']
+                if attention_weights:
+                    # Simple update: adjust temperature based on max attention weight
+                    final_params.temperature *= (1 + max(attention_weights))
+
             script = self.code_generator.generate(final_params, i)
             generated_scripts.append(script)
-            print(f"  - Generated Layer {i}")
+
+            # Simulate layer output for the next attention step
+            # In a real system, this would be the actual output of the script
+            mock_output = [random.random() for _ in range(16)]
+            layer_outputs.append(mock_output)
+            query = mock_output  # Use the output as the query for the next layer
+
+            print(f"  - Generated Layer {i} with Temp={final_params.temperature:.2f}")
+
+        if enable_federated_optimization:
+            final_params = self.federated_optimizer.optimize(final_params)
+
+        # Phase 4: Verification and Feedback
+        print("\n🔬 PHASE 4: Verification and Feedback")
+        total_quality = 0.0
+        for i, script in enumerate(generated_scripts):
+            metrics = self.verifier.verify_script(script)
+            print(f"  - Verified Layer {i}: Syntax OK={metrics['syntax_ok']}, Runtime OK={metrics['runtime_ok']}")
+            total_quality += metrics['overall_quality']
+
+        final_quality = total_quality / len(generated_scripts) if generated_scripts else 0.0
+        print(f"  - Final Aggregated Quality: {final_quality:.2f}")
 
         # Record task for meta-learning
         task_metadata = TaskMetadata(
@@ -86,7 +155,7 @@ class OrchestratorAI:
             project_type=project_type,
             complexity_level=complexity,
             domain=domain,
-            success_metrics={'overall_quality': 0.85}, # Dummy value for now
+            success_metrics={'overall_quality': final_quality},
             optimal_config=strategy,
             timestamp=datetime.now().isoformat()
         )
@@ -106,6 +175,11 @@ def main():
     parser.add_argument("--project_type", type=str, default="data_pipeline", help="Type of the project (e.g., 'data_pipeline', 'web_scraper').")
     parser.add_argument("--domain", type=str, default="data_engineering", help="Domain of the project.")
     parser.add_argument("--complexity", type=float, default=0.8, help="Complexity of the project (0.0 to 1.0).")
+    parser.add_argument("--load-metaknowledge", type=str, help="Path to load MetaLearner state from.")
+    parser.add_argument("--save-metaknowledge", type=str, help="Path to save MetaLearner state to.")
+    parser.add_argument("--enable-transfer-learning", action="store_true", help="Enable Transfer Learning.")
+    parser.add_argument("--enable-nas", action="store_true", help="Enable Neural Architecture Search.")
+    parser.add_argument("--enable-federated-optimization", action="store_true", help="Enable Federated Optimization.")
 
     args = parser.parse_args()
 
@@ -114,16 +188,33 @@ def main():
         objective=args.objective
     )
 
-    # Initialize a persistent MetaLearner
-    # In a real application, you would save/load this from a file
-    meta_learner = MetaLearner()
+    # Initialize or load the MetaLearner
+    if args.load_metaknowledge:
+        try:
+            with open(args.load_metaknowledge, 'rb') as f:
+                meta_learner = pickle.load(f)
+            print(f"🧠 Meta-knowledge loaded from {args.load_metaknowledge}")
+        except (FileNotFoundError, pickle.UnpicklingError):
+            print("⚠️  Could not load meta-knowledge, starting fresh.")
+            meta_learner = MetaLearner()
+    else:
+        meta_learner = MetaLearner()
 
     orchestrator = OrchestratorAI(context, meta_learner)
     final_scripts = orchestrator.orchestrate(
         project_type=args.project_type,
         domain=args.domain,
-        complexity=args.complexity
+        complexity=args.complexity,
+        enable_transfer_learning=args.enable_transfer_learning,
+        enable_nas=args.enable_nas,
+        enable_federated_optimization=args.enable_federated_optimization
     )
+
+    # Save the MetaLearner's state if requested
+    if args.save_metaknowledge:
+        with open(args.save_metaknowledge, 'wb') as f:
+            pickle.dump(meta_learner, f)
+        print(f"🧠 Meta-knowledge saved to {args.save_metaknowledge}")
 
     print("\n" + "="*70)
     print("ORCHESTRATION COMPLETE")
