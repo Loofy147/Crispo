@@ -381,12 +381,18 @@ def process_layer_{layer_id}(data):
 # ADVANCED FEATURE: META-LEARNING
 # ============================================================================
 
+def _create_default_dict_list():
+    """Helper function for pickling defaultdict."""
+    return defaultdict(list)
+
 class MetaLearner:
     """Learns which optimization strategies work best for different task types."""
 
-    def __init__(self):
+    def __init__(self, epsilon: float = 0.3):
+        self.epsilon = epsilon
         self.task_history: List[TaskMetadata] = []
-        self.strategy_performance: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+        self.strategy_performance: Dict[str, Dict[str, List[float]]] = defaultdict(_create_default_dict_list)
+        self.available_strategies = ["high_quality", "high_speed", "balanced"]
 
     def record_task(self, task: TaskMetadata):
         """Record a task's execution for meta-learning."""
@@ -397,10 +403,22 @@ class MetaLearner:
         )
 
     def get_optimal_strategy(self, project_type: str, complexity: float) -> Dict[str, Any]:
-        """Get the optimal strategy for a new task based on meta-learned knowledge."""
+        """
+        Get the optimal strategy for a new task using an epsilon-greedy approach.
+        """
+        # 1. Decide whether to explore or exploit
+        if random.random() < self.epsilon:
+            print("  [MetaLearner] Exploring a random strategy.")
+            strategy_name = random.choice(self.available_strategies)
+            return self._decode_strategy(strategy_name, complexity)
+
+        # 2. If exploiting, check for existing knowledge
         if project_type not in self.strategy_performance:
+            print("  [MetaLearner] No history for project type, using default strategy.")
             return self._default_strategy(complexity)
 
+        # 3. Exploit the best-known strategy
+        print("  [MetaLearner] Exploiting the best-known strategy.")
         best_strategy = "balanced"
         best_performance = float('-inf')
 
