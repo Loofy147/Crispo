@@ -71,7 +71,8 @@ class OrchestratorAI:
         complexity: float,
         enable_transfer_learning: bool,
         enable_nas: bool,
-        enable_federated_optimization: bool
+        enable_federated_optimization: bool,
+        trust_parameter: float
     ) -> List[str]:
         """Executes the full, multi-phase orchestration pipeline.
 
@@ -87,6 +88,8 @@ class OrchestratorAI:
             enable_nas (bool): Flag to enable Neural Architecture Search.
             enable_federated_optimization (bool): Flag to enable Federated
                 Optimization.
+            trust_parameter (float): The trust parameter (lambda) for
+                learning-augmented algorithms.
 
         Returns:
             List[str]: A list of strings, where each string is the generated
@@ -141,20 +144,42 @@ class OrchestratorAI:
         generated_scripts = []
         pipeline_context = {}  # Initialize the data pipeline context
 
-        for i in range(3): # Generate 3 layers
-            script = self.code_generator.generate(final_params, i, self.context.objective)
+        # If it's a learning-augmented algorithm, generate one script
+        if "ski rental" in self.context.objective.lower():
+            script = self.code_generator.generate(final_params, 0, self.context.objective, trust_parameter)
             generated_scripts.append(script)
-            print(f"  - Generated Layer {i} with Temp={final_params.temperature:.2f}")
+            print("  - Generated Learning-Augmented Algorithm Script for Ski Rental")
+        else:
+            for i in range(3): # Generate 3 layers for a standard pipeline
+                script = self.code_generator.generate(final_params, i, self.context.objective, trust_parameter)
+                generated_scripts.append(script)
+                print(f"  - Generated Layer {i} with Temp={final_params.temperature:.2f}")
 
         if enable_federated_optimization:
             final_params = self.federated_optimizer.optimize(final_params)
 
         # Phase 4: Verification and Feedback
         print("\n🔬 PHASE 4: Verification and Feedback")
-        # The verifier will now handle the pipeline execution
-        metrics = self.verifier.verify_pipeline(generated_scripts)
-        final_quality = metrics['overall_quality']
-        print(f"  - Final Aggregated Quality: {final_quality:.2f}")
+
+        # If it's a learning-augmented algorithm, use the new evaluation method
+        if "ski rental" in self.context.objective.lower():
+            # For LAA, we only generate one script
+            laa_script = generated_scripts[0]
+            laa_metrics = self.verifier.evaluate_learning_augmented_algorithm(
+                script_code=laa_script,
+                trust_parameter=trust_parameter,
+                problem_params={'buy_cost': 100} # Example buy cost
+            )
+            print(f"  - LAA Consistency: {laa_metrics['consistency']:.2f}-competitive")
+            print(f"  - LAA Robustness: {laa_metrics['robustness']:.2f}-competitive")
+            success_metrics = laa_metrics
+        else:
+            # Fallback to the original pipeline verification
+            metrics = self.verifier.verify_pipeline(generated_scripts)
+            final_quality = metrics['overall_quality']
+            print(f"  - Final Aggregated Quality: {final_quality:.2f}")
+            success_metrics = {'overall_quality': final_quality}
+
 
         # Record task for meta-learning
         task_metadata = TaskMetadata(
@@ -162,7 +187,7 @@ class OrchestratorAI:
             project_type=project_type,
             complexity_level=complexity,
             domain=domain,
-            success_metrics={'overall_quality': final_quality},
+            success_metrics=success_metrics,
             optimal_config=strategy,
             timestamp=datetime.now().isoformat()
         )
@@ -193,6 +218,7 @@ def main():
     parser.add_argument("--enable-transfer-learning", action="store_true", help="Enable Transfer Learning.")
     parser.add_argument("--enable-nas", action="store_true", help="Enable Neural Architecture Search.")
     parser.add_argument("--enable-federated-optimization", action="store_true", help="Enable Federated Optimization.")
+    parser.add_argument("--trust-parameter", type=float, default=0.8, help="Trust parameter (lambda) for the learning-augmented algorithm.")
 
     args = parser.parse_args()
 
@@ -220,7 +246,8 @@ def main():
         complexity=args.complexity,
         enable_transfer_learning=args.enable_transfer_learning,
         enable_nas=args.enable_nas,
-        enable_federated_optimization=args.enable_federated_optimization
+        enable_federated_optimization=args.enable_federated_optimization,
+        trust_parameter=args.trust_parameter
     )
 
     # Save the MetaLearner's state if requested

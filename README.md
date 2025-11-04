@@ -49,6 +49,30 @@ python3 orchestrator.py [OPTIONS]
 - `--enable-transfer-learning`: Enable Transfer Learning.
 - `--enable-nas`: Enable Neural Architecture Search.
 - `--enable-federated-optimization`: Enable Federated Optimization.
+- `--trust-parameter`: The trust parameter (lambda) for learning-augmented algorithms.
+
+## ✨ New in v2.0: Learning-Augmented Algorithms
+
+As of v2.0, OrchestratorAI has been upgraded to a powerful framework for designing and evaluating **Learning-Augmented Algorithms (LAA)**, based on the latest research in the field.
+
+You can now use OrchestratorAI to generate self-contained algorithms for classic online problems (like the Ski Rental problem) and automatically evaluate their core performance guarantees:
+- **Consistency:** How well the algorithm performs with perfect ML predictions.
+- **Robustness:** How well the algorithm performs with worst-case ML predictions.
+
+### Generating a Learning-Augmented Algorithm
+
+To generate an LAA, simply specify the problem in the objective. For example:
+
+```bash
+python3 orchestrator.py \
+    --objective "Generate a learning-augmented algorithm for the ski rental problem" \
+    --trust-parameter 0.8 \
+    --save-metaknowledge laa_knowledge.pkl
+```
+
+This will produce a single, executable Python script that implements the learning-augmented ski rental algorithm. The `--trust-parameter` (lambda) allows you to control the trade-off between trusting the ML prediction and falling back on the robust classical strategy.
+
+The system's `Verifier` will automatically evaluate the generated algorithm and output its measured consistency and robustness, which are then recorded by the `MetaLearner`.
 
 ### Example
 

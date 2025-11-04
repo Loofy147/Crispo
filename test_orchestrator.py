@@ -267,7 +267,8 @@ class TestOrchestratorIntegration(unittest.TestCase):
             complexity=0.5,
             enable_transfer_learning=False,
             enable_nas=False,
-            enable_federated_optimization=False
+            enable_federated_optimization=False,
+            trust_parameter=0.5 # Add default for old test
         )
 
         self.assertEqual(len(final_scripts), 3)
@@ -291,11 +292,47 @@ class TestOrchestratorIntegration(unittest.TestCase):
             complexity=0.5,
             enable_transfer_learning=True,
             enable_nas=True,
-            enable_federated_optimization=True
+            enable_federated_optimization=True,
+            trust_parameter=0.5 # Add default for old test
         )
 
         self.assertEqual(len(final_scripts), 3)
         self.assertIsInstance(final_scripts[0], str)
+
+class TestLearningAugmentedAlgorithms(unittest.TestCase):
+    """Tests for the new Learning-Augmented Algorithm functionality."""
+
+    def test_ski_rental_laa_pipeline(self):
+        """Test the end-to-end pipeline for generating and evaluating a ski rental LAA."""
+        context = OrchestrationContext(
+            project="SkiRentalLAA",
+            objective="Generate a learning-augmented algorithm for the ski rental problem"
+        )
+        # Use a meta learner with epsilon=0 to ensure we test the main path
+        meta_learner = MetaLearner(epsilon=0.0)
+        orchestrator = OrchestratorAI(context, meta_learner)
+
+        final_scripts = orchestrator.orchestrate(
+            project_type="laa_ski_rental",
+            domain="online_algorithms",
+            complexity=0.5,
+            enable_transfer_learning=False,
+            enable_nas=False,
+            enable_federated_optimization=False,
+            trust_parameter=0.8
+        )
+
+        # Should generate a single, complete script
+        self.assertEqual(len(final_scripts), 1)
+        self.assertIn("def ski_rental_algorithm", final_scripts[0])
+
+        # Check that the meta learner recorded the LAA metrics
+        self.assertEqual(len(meta_learner.task_history), 1)
+        task_record = meta_learner.task_history[0]
+        self.assertIn('consistency', task_record.success_metrics)
+        self.assertIn('robustness', task_record.success_metrics)
+        # The pseudocode's formula is not 2-robust. We test that it's bounded.
+        self.assertLess(task_record.success_metrics['robustness'], 6.0)
 
 
 if __name__ == '__main__':

@@ -545,7 +545,7 @@ class CodeGenerator:
     to select the most appropriate code template for a given layer.
     """
 
-    def generate(self, params: LayerParameters, layer_id: int, objective: str) -> str:
+    def generate(self, params: LayerParameters, layer_id: int, objective: str, trust_parameter: float = 0.8) -> str:
         """Selects and generates a script for a single layer.
 
         This method uses keyword matching on the user's objective to select
@@ -559,11 +559,18 @@ class CodeGenerator:
             layer_id (int): The ID of the current layer (e.g., 0, 1, 2).
             objective (str): The user's high-level objective string, used for
                 intent detection.
+            trust_parameter (float): The trust parameter (lambda) for
+                learning-augmented algorithms.
 
         Returns:
             str: A string containing the generated Python script.
         """
         objective = objective.lower()
+
+        # Check for LAA-specific objectives first
+        if "ski rental" in objective:
+            # For LAA, we generate a single, complete script instead of a layer
+            return self._generate_ski_rental_laa_template(params, trust_parameter)
 
         # Layer 0: Prioritize fetching data
         if layer_id == 0 and any(kw in objective for kw in ['fetch', 'get', 'api', 'request']):
@@ -587,6 +594,75 @@ class CodeGenerator:
             return self._generate_api_template(params, layer_id)
 
         return self._generate_simple_template(params, layer_id)
+
+    def _generate_ski_rental_laa_template(self, params: LayerParameters, trust_parameter: float) -> str:
+        """Generates a script for the Ski Rental problem using a learning-augmented algorithm."""
+        return f'''"""
+Learning-Augmented Algorithm for the Ski Rental Problem
+"""
+import sys
+import json
+
+def ski_rental_algorithm(B, prediction_days, trust_lambda, actual_days):
+    """
+    Executes the learning-augmented ski rental algorithm.
+
+    Args:
+        B (int): The cost to buy skis.
+        prediction_days (int): The predicted number of skiing days.
+        trust_lambda (float): The trust parameter (lambda) between 0 and 1.
+        actual_days (int): The actual number of skiing days.
+
+    Returns:
+        int: The total cost incurred by the algorithm.
+    """
+    # The core of the learning-augmented algorithm: a blended threshold
+    threshold = (1 - trust_lambda) * B + trust_lambda * min(prediction_days, B)
+
+    cost = 0
+    bought_skis = False
+    for day in range(1, actual_days + 1):
+        if day >= threshold and not bought_skis:
+            cost += B
+            bought_skis = True
+            break
+        else:
+            cost += 1 # Rent for the day
+
+    # If we never bought, the total cost is just the number of days we rented
+    if not bought_skis:
+        cost = actual_days
+
+    return cost
+
+def calculate_optimal_cost(B, actual_days):
+    """Calculates the optimal offline cost."""
+    return min(B, actual_days)
+
+def main():
+    """Main execution function."""
+    if len(sys.argv) != 5:
+        print("Usage: python ski_rental.py <buy_cost> <prediction_days> <trust_lambda> <actual_days>")
+        sys.exit(1)
+
+    B = int(sys.argv[1])
+    prediction_days = int(sys.argv[2])
+    trust_lambda = float(sys.argv[3])
+    actual_days = int(sys.argv[4])
+
+    alg_cost = ski_rental_algorithm(B, prediction_days, trust_lambda, actual_days)
+    opt_cost = calculate_optimal_cost(B, actual_days)
+
+    output = {{
+        "algorithm_cost": alg_cost,
+        "optimal_cost": opt_cost,
+        "competitive_ratio": alg_cost / opt_cost if opt_cost > 0 else 1
+    }}
+    print(json.dumps(output))
+
+if __name__ == "__main__":
+    main()
+'''
 
     def _generate_high_complexity_template(self, params: LayerParameters, layer_id: int) -> str:
         """Generates a script for high-complexity data processing using NumPy.
@@ -960,3 +1036,70 @@ class Verifier:
 
         final_quality = total_quality / num_scripts if num_scripts > 0 else 0.0
         return {'overall_quality': final_quality}
+
+    def evaluate_learning_augmented_algorithm(
+        self,
+        script_code: str,
+        trust_parameter: float,
+        problem_params: Dict[str, Any]
+    ) -> Dict[str, float]:
+        """
+        Evaluates a learning-augmented algorithm for consistency and robustness.
+
+        This method runs the generated script under various scenarios to measure
+        its performance with perfect and worst-case predictions.
+
+        Args:
+            script_code (str): The Python code of the learning-augmented algorithm.
+            trust_parameter (float): The lambda value to pass to the script.
+            problem_params (Dict[str, Any]): A dictionary of problem-specific
+                parameters, e.g., {'buy_cost': 100} for ski rental.
+
+        Returns:
+            Dict[str, float]: A dictionary containing the measured 'consistency'
+                and 'robustness' of the algorithm.
+        """
+        metrics = {'consistency': 0.0, 'robustness': 0.0}
+        buy_cost = problem_params.get('buy_cost', 100)
+
+        consistency_ratios = []
+        robustness_ratios = []
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write(script_code)
+            temp_filename = temp_file.name
+
+        try:
+            # Test over a range of scenarios (e.g., actual skiing days)
+            for actual_days in range(1, buy_cost * 2):
+                # 1. Evaluate Consistency (perfect prediction)
+                perfect_prediction = actual_days
+                result = subprocess.run(
+                    ['python3', temp_filename, str(buy_cost), str(perfect_prediction), str(trust_parameter), str(actual_days)],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    output = json.loads(result.stdout)
+                    consistency_ratios.append(output['competitive_ratio'])
+
+                # 2. Evaluate Robustness (worst-case prediction)
+                # A simple worst-case prediction for ski rental is to predict 1 day
+                worst_prediction = 1
+                result = subprocess.run(
+                    ['python3', temp_filename, str(buy_cost), str(worst_prediction), str(trust_parameter), str(actual_days)],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    output = json.loads(result.stdout)
+                    robustness_ratios.append(output['competitive_ratio'])
+
+            if consistency_ratios:
+                metrics['consistency'] = max(consistency_ratios)
+            if robustness_ratios:
+                metrics['robustness'] = max(robustness_ratios)
+
+        finally:
+            import os
+            os.remove(temp_filename)
+
+        return metrics
