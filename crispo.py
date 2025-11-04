@@ -175,7 +175,8 @@ class Crispo:
                 print(f"  - Generated Layer {i} with Temp={final_params.temperature:.2f}")
 
         if enable_federated_optimization:
-            final_params = self.federated_optimizer.optimize(final_params)
+            client_data_sizes = [random.randint(100, 1000) for _ in range(self.federated_optimizer.num_clients)]
+            final_params = self.federated_optimizer.optimize(final_params, client_data_sizes)
 
         # Phase 4: Verification and Feedback
         print("\n🔬 PHASE 4: Verification and Feedback")
