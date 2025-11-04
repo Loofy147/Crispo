@@ -163,41 +163,53 @@ class TestRLAgent(unittest.TestCase):
 class TestMetaLearner(unittest.TestCase):
 
     def setUp(self):
-        self.ml = MetaLearner()
         self.task1 = TaskMetadata(
             task_id="1",
             project_type="data_pipeline",
             complexity_level=0.8,
             domain="data_engineering",
             success_metrics={'overall_quality': 0.9},
-            optimal_config={'ga_generations': 25, 'rl_episodes': 12},
+            optimal_config={'ga_generations': 25, 'rl_episodes': 12}, # high_quality
             timestamp=""
         )
         self.task2 = TaskMetadata(
             task_id="2",
-            project_type="web_scraper",
+            project_type="data_pipeline",
             complexity_level=0.4,
-            domain="web_services",
-            success_metrics={'overall_quality': 0.7},
-            optimal_config={'ga_generations': 5, 'rl_episodes': 3},
+            domain="data_engineering",
+            success_metrics={'overall_quality': 0.1},
+            optimal_config={'ga_generations': 5, 'rl_episodes': 3}, # high_speed
             timestamp=""
         )
 
-    def test_record_and_get_strategy(self):
-        self.ml.record_task(self.task1)
-        self.ml.record_task(self.task2)
+    def test_exploitation(self):
+        # With epsilon = 0.0, it should always exploit
+        ml = MetaLearner(epsilon=0.0)
+        ml.record_task(self.task1)
+        ml.record_task(self.task2)
 
-        strategy_dp = self.ml.get_optimal_strategy("data_pipeline", 0.8)
-        self.assertEqual(strategy_dp['ga_generations'], 20)
-        self.assertEqual(strategy_dp['rl_episodes'], 9)
+        # The best strategy is 'high_quality'
+        strategy = ml.get_optimal_strategy("data_pipeline", 0.8)
+        self.assertEqual(strategy['ga_generations'], 20) # 25 * 0.8
 
-        strategy_ws = self.ml.get_optimal_strategy("web_scraper", 0.4)
-        self.assertEqual(strategy_ws['ga_generations'], 5)
-        self.assertEqual(strategy_ws['rl_episodes'], 3)
+    def test_exploration(self):
+        # With epsilon = 1.0, it should always explore
+        ml = MetaLearner(epsilon=1.0)
+        ml.record_task(self.task1)
+        ml.record_task(self.task2)
 
-        strategy_unknown = self.ml.get_optimal_strategy("unknown_type", 0.5)
-        self.assertEqual(strategy_unknown['ga_generations'], 5)
-        self.assertEqual(strategy_unknown['rl_episodes'], 2)
+        # Run it 100 times, it should not always be high_quality
+        strategies = [ml.get_optimal_strategy("data_pipeline", 0.8) for _ in range(100)]
+        is_always_best = all([s['ga_generations'] == 20 for s in strategies])
+        self.assertFalse(is_always_best)
+
+    def test_default_strategy_for_unknown_project_type(self):
+        ml = MetaLearner(epsilon=0.0) # Ensure no exploration
+        ml.record_task(self.task1)
+
+        strategy = ml.get_optimal_strategy("unknown_type", 0.5)
+        self.assertEqual(strategy['ga_generations'], 5) # 10 * 0.5
+        self.assertEqual(strategy['rl_episodes'], 2) # 5 * 0.5
 
 class TestOrchestratorIntegration(unittest.TestCase):
 
