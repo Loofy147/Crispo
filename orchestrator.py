@@ -183,8 +183,9 @@ class OrchestratorAI:
             )
             print(f"  - LAA Consistency (Error=0%): {laa_metrics['consistency']:.2f}-competitive")
             print(f"  - LAA Robustness (Worst-Case Error): {laa_metrics['robustness']:.2f}-competitive")
+            print(f"  - LAA Brittleness Detected: {laa_metrics['is_brittle']}")
             print("  - LAA Smoothness Profile:")
-            for error, ratio in laa_metrics['smoothness_profile'].items():
+            for error, ratio in sorted(laa_metrics['smoothness_profile'].items()):
                 print(f"    - Error Level {int(error*100)}%: {ratio:.2f}-competitive")
             success_metrics = laa_metrics
         else:

@@ -58,9 +58,10 @@ As of v2.0, OrchestratorAI has been upgraded to a powerful framework for designi
 You can now use OrchestratorAI to generate self-contained algorithms for classic online problems (like the Ski Rental problem) and automatically evaluate their core performance guarantees:
 - **Consistency:** How well the algorithm performs with perfect ML predictions.
 - **Robustness:** How well the algorithm performs with worst-case ML predictions.
-- **Smoothness:** How gracefully the algorithm's performance degrades as the ML prediction error increases. This is a crucial metric for understanding real-world performance.
+- **Smoothness:** How gracefully the algorithm's performance degrades as the ML prediction error increases.
+- **Brittleness:** A formal check to detect if the algorithm's performance collapses to its worst-case guarantee even with tiny prediction errors.
 
-The system's `Verifier` will automatically evaluate the generated algorithm and output its measured consistency, robustness, and a full smoothness profile, which are then recorded by the `MetaLearner`.
+The system's `Verifier` will automatically evaluate the generated algorithm and output all of these key metrics, which are then recorded by the `MetaLearner`.
 
 ### Generating a Learning-Augmented Algorithm
 

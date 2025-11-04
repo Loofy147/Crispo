@@ -1193,11 +1193,16 @@ class Verifier:
 
         Returns:
             Dict[str, Any]: A dictionary containing 'consistency', 'robustness',
-                and 'smoothness_profile'.
+                'smoothness_profile', and 'is_brittle'.
         """
-        metrics = {'consistency': 0.0, 'robustness': 0.0, 'smoothness_profile': {}}
+        metrics = {'consistency': 0.0, 'robustness': 0.0, 'smoothness_profile': {}, 'is_brittle': False}
         consistency_ratios, robustness_ratios = [], []
-        smoothness_ratios = {level: [] for level in error_levels}
+
+        # Add a tiny epsilon to check for brittleness
+        brittleness_epsilon = 1e-6
+        all_error_levels = error_levels + [brittleness_epsilon]
+        smoothness_ratios = {level: [] for level in all_error_levels}
+
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
             temp_file.write(script_code)
@@ -1222,7 +1227,7 @@ class Verifier:
                     robustness_ratios.append(output['competitive_ratio'])
 
                 # 3. Evaluate Smoothness
-                for error in error_levels:
+                for error in all_error_levels:
                     noisy_prediction = problem_context.get_noisy_prediction(scenario, error)
                     cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(noisy_prediction), trust_parameter, scenario)
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
@@ -1237,6 +1242,27 @@ class Verifier:
             for error in error_levels:
                 if smoothness_ratios[error]:
                     metrics['smoothness_profile'][error] = max(smoothness_ratios[error])
+
+            # Formal Brittleness Check
+            consistency_cr = metrics['consistency']
+            robustness_cr = metrics['robustness']
+            tiny_error_cr = max(smoothness_ratios.get(brittleness_epsilon, [consistency_cr]))
+            cr_at_10_percent = metrics['smoothness_profile'].get(0.1, consistency_cr)
+
+            is_brittle = False
+            # Condition 1: Immediate jump to robustness bound
+            if (robustness_cr - consistency_cr) > 1e-9:
+                jump_ratio = (tiny_error_cr - consistency_cr) / (robustness_cr - consistency_cr)
+                if jump_ratio > 0.9:
+                    is_brittle = True
+
+            # Condition 2: Flat smoothness profile at the start
+            if not is_brittle and abs(cr_at_10_percent - consistency_cr) < 1e-9:
+                if (robustness_cr - consistency_cr) > 0.1: # Only flag if there is a real perf gap
+                    is_brittle = True
+
+            metrics['is_brittle'] = is_brittle
+
         finally:
             import os
             os.remove(temp_filename)

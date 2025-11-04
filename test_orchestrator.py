@@ -332,6 +332,7 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         self.assertIn('consistency', task_record.success_metrics)
         self.assertIn('robustness', task_record.success_metrics)
         self.assertIn('smoothness_profile', task_record.success_metrics)
+        self.assertIn('is_brittle', task_record.success_metrics)
 
         # The pseudocode's formula is not 2-robust. We test that it's bounded.
         self.assertLess(task_record.success_metrics['robustness'], 6.0)
@@ -340,6 +341,9 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         profile = task_record.success_metrics['smoothness_profile']
         sorted_ratios = [v for k, v in sorted(profile.items())]
         self.assertTrue(all(sorted_ratios[i] <= sorted_ratios[i+1] for i in range(len(sorted_ratios)-1)))
+
+        # Verify that the ski rental algorithm is correctly identified as brittle
+        self.assertTrue(task_record.success_metrics['is_brittle'])
 
     def test_one_max_laa_pipeline(self):
         """Test the end-to-end pipeline for the One-Max Search LAA."""
@@ -368,6 +372,10 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
         self.assertIn('consistency', task_record.success_metrics)
         self.assertIn('robustness', task_record.success_metrics)
         self.assertIn('smoothness_profile', task_record.success_metrics)
+        self.assertIn('is_brittle', task_record.success_metrics)
+
+        # Verify that the one-max algorithm is correctly identified as not brittle
+        self.assertFalse(task_record.success_metrics['is_brittle'])
 
 
 if __name__ == '__main__':
