@@ -88,19 +88,19 @@ class TestCodeGenerator(unittest.TestCase):
         )
 
     def test_generate_high_complexity(self):
-        script = self.cg.generate(self.params, 0)
+        script = self.cg.generate(self.params, 0, "analyze")
         self.assertIn("class Layer0System", script)
         self.assertIn("import numpy as np", script)
 
     def test_generate_medium_complexity(self):
         self.params.weights['complexity'] = 0.6
-        script = self.cg.generate(self.params, 1)
+        script = self.cg.generate(self.params, 1, "process")
         self.assertIn("import pandas as pd", script)
         self.assertIn("def process_layer_1", script)
 
     def test_generate_low_complexity(self):
         self.params.weights['complexity'] = 0.1
-        script = self.cg.generate(self.params, 2)
+        script = self.cg.generate(self.params, 2, "fetch")
         self.assertNotIn("class", script)
         self.assertIn("def process_layer_2", script)
 
