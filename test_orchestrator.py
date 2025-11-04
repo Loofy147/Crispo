@@ -18,7 +18,6 @@ from orchestrator_core import (
 )
 from orchestrator import OrchestratorAI, OrchestrationContext
 from advanced_orchestrator import (
-    NeuralArchitectureSearch,
     FederatedOptimizer
 )
 
@@ -33,13 +32,6 @@ class TestAdvancedFeatures(unittest.TestCase):
             biases={'logging': 0.0},
             temperature=1.0
         )
-
-    def test_neural_architecture_search(self):
-        """Test the placeholder NAS to ensure it returns a valid architecture."""
-        nas = NeuralArchitectureSearch(search_space={'layer_type': ['dense']})
-        architecture = nas.search(num_layers=3)
-        self.assertEqual(len(architecture), 3)
-        self.assertEqual(architecture[0]['layer_type'], ['dense'])
 
     def test_federated_optimizer(self):
         """Ensure the placeholder Federated Optimizer returns the model unmodified."""
@@ -326,6 +318,23 @@ class TestOrchestratorIntegration(unittest.TestCase):
         if os.path.exists("model_registry.log"):
             os.remove("model_registry.log")
         os.rmdir("model_store")
+
+    def test_production_nas_pipeline(self):
+        """Test that the new NAS pipeline runs without errors."""
+        context = OrchestrationContext(project="NASTest", objective="Test NAS")
+        orchestrator = OrchestratorAI(context, MetaLearner())
+
+        # We just want to ensure this runs to completion without crashing
+        final_scripts = orchestrator.orchestrate(
+            project_type="data_pipeline",
+            domain="testing",
+            complexity=0.9,
+            enable_transfer_learning=False,
+            enable_nas=True,
+            enable_federated_optimization=False,
+            trust_parameter=0.5
+        )
+        self.assertEqual(len(final_scripts), 3)
 
 
 class TestLearningAugmentedAlgorithms(unittest.TestCase):
