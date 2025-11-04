@@ -381,12 +381,16 @@ def process_layer_{layer_id}(data):
 # ADVANCED FEATURE: META-LEARNING
 # ============================================================================
 
+def _create_default_dict_list():
+    """Helper function for pickling defaultdict."""
+    return defaultdict(list)
+
 class MetaLearner:
     """Learns which optimization strategies work best for different task types."""
 
     def __init__(self):
         self.task_history: List[TaskMetadata] = []
-        self.strategy_performance: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+        self.strategy_performance: Dict[str, Dict[str, List[float]]] = defaultdict(_create_default_dict_list)
 
     def record_task(self, task: TaskMetadata):
         """Record a task's execution for meta-learning."""
