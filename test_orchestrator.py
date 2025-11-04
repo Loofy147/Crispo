@@ -18,7 +18,6 @@ from orchestrator_core import (
 )
 from orchestrator import OrchestratorAI, OrchestrationContext
 from advanced_orchestrator import (
-    TransferLearningEngine,
     NeuralArchitectureSearch,
     FederatedOptimizer
 )
@@ -34,20 +33,6 @@ class TestAdvancedFeatures(unittest.TestCase):
             biases={'logging': 0.0},
             temperature=1.0
         )
-
-    def test_transfer_learning_engine(self):
-        """Verify that the Transfer Learning Engine correctly modifies parameters."""
-        model_store = {
-            "data_pipeline": LayerParameters(
-                layer_id=0,
-                weights={'complexity': 0.5, 'execution': 0.5},
-                biases={'logging': 0.1},
-                temperature=1.0
-            )
-        }
-        tle = TransferLearningEngine(model_store)
-        updated_params = tle.apply(self.params, "data_pipeline")
-        self.assertNotEqual(updated_params.weights['complexity'], 1.0)
 
     def test_neural_architecture_search(self):
         """Test the placeholder NAS to ensure it returns a valid architecture."""
@@ -298,6 +283,50 @@ class TestOrchestratorIntegration(unittest.TestCase):
 
         self.assertEqual(len(final_scripts), 3)
         self.assertIsInstance(final_scripts[0], str)
+
+        # Clean up log file created by this test
+        import os
+        if os.path.exists("model_registry.log"):
+            os.remove("model_registry.log")
+
+    def test_production_transfer_learning_pipeline(self):
+        """Test the new, self-generated transfer learning pipeline."""
+        import os
+        import json
+
+        # 1. Set up the model store and a dummy model
+        os.makedirs("model_store", exist_ok=True)
+        model_data = {"weights": {"complexity": 0.1, "execution": 0.2}}
+        model_path = "model_store/data_pipeline_model.json"
+        with open(model_path, 'w') as f:
+            json.dump(model_data, f)
+
+        # 2. Run the orchestrator with transfer learning enabled
+        context = OrchestrationContext(project="TLTest", objective="Test TL")
+        orchestrator = OrchestratorAI(context, MetaLearner())
+
+        orchestrator.orchestrate(
+            project_type="data_pipeline",
+            domain="testing",
+            complexity=0.9, # Start with high complexity
+            enable_transfer_learning=True,
+            enable_nas=False,
+            enable_federated_optimization=False,
+            trust_parameter=0.5
+        )
+
+        # 3. Verify that the model registry was written to
+        self.assertTrue(os.path.exists("model_registry.log"))
+        with open("model_registry.log", 'r') as f:
+            log_entry = json.loads(f.read())
+            self.assertEqual(log_entry['model_path'], model_path)
+
+        # 4. Clean up artifacts
+        os.remove(model_path)
+        if os.path.exists("model_registry.log"):
+            os.remove("model_registry.log")
+        os.rmdir("model_store")
+
 
 class TestLearningAugmentedAlgorithms(unittest.TestCase):
     """Tests for the new Learning-Augmented Algorithm functionality."""

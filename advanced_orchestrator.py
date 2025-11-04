@@ -6,47 +6,6 @@ Transfer Learning, Neural Architecture Search, and Federated Optimization.
 
 from typing import Dict, List, Any
 
-class TransferLearningEngine:
-    """Manages transfer learning from pre-existing script models.
-
-    This class adapts parameters for a new task by leveraging knowledge from
-    previously successful models for similar project types. This can speed up
-    convergence and improve the quality of the generated scripts.
-    """
-
-    def __init__(self, model_store: Dict[str, Any]):
-        """Initializes the TransferLearningEngine.
-
-        Args:
-            model_store (Dict[str, Any]): A dictionary where keys are project
-                types and values are pre-trained model parameters.
-        """
-        self.model_store = model_store
-
-    def apply(self, params: Any, project_type: str) -> Any:
-        """Applies transfer learning to the given parameters.
-
-        If a model for the given project type exists in the model store, this
-        method will average the weights of the incoming parameters with the
-        stored model's weights.
-
-        Args:
-            params (Any): The parameter object (e.g., LayerParameters) to be adapted.
-            project_type (str): The type of the project for which to apply
-                transfer learning.
-
-        Returns:
-            Any: The adapted parameters.
-        """
-        if project_type in self.model_store:
-            print(f"  [TL] Applying transfer learning from '{project_type}' model.")
-            # In a real system, this would be a more sophisticated merge
-            model = self.model_store[project_type]
-            for key in params.weights:
-                if key in model.weights:
-                    params.weights[key] = (params.weights[key] + model.weights[key]) / 2
-        return params
-
 class NeuralArchitectureSearch:
     """Performs neural architecture search to find the optimal layer structure.
 
