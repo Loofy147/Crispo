@@ -31,9 +31,23 @@ from advanced_orchestrator import (
 # ============================================================================
 
 class OrchestratorAI:
-    """Main orchestration engine."""
+    """Main orchestration engine for the OrchestratorAI system.
+
+    This class integrates all the core components (GA, RL, Code Generation,
+    etc.) and advanced features (Transfer Learning, NAS) to execute the
+    end-to-end script generation and optimization pipeline. It manages the
+    flow of control through the different phases of orchestration.
+    """
 
     def __init__(self, context: OrchestrationContext, meta_learner: MetaLearner):
+        """Initializes the OrchestratorAI engine.
+
+        Args:
+            context (OrchestrationContext): The global context for this
+                orchestration run, containing the project name and objective.
+            meta_learner (MetaLearner): The MetaLearner instance, which may be
+                pre-loaded with historical knowledge.
+        """
         self.context = context
         self.ga_optimizer = GAOptimizer()
         self.rl_agent = RLAgent()
@@ -59,7 +73,25 @@ class OrchestratorAI:
         enable_nas: bool,
         enable_federated_optimization: bool
     ) -> List[str]:
-        """Execute the full orchestration pipeline."""
+        """Executes the full, multi-phase orchestration pipeline.
+
+        This method guides the process from strategy selection through code
+        generation, optimization, and verification.
+
+        Args:
+            project_type (str): The category of the project (e.g., 'data_pipeline').
+            domain (str): The application domain (e.g., 'finance').
+            complexity (float): The complexity of the task, from 0.0 to 1.0.
+            enable_transfer_learning (bool): Flag to enable the Transfer
+                Learning engine.
+            enable_nas (bool): Flag to enable Neural Architecture Search.
+            enable_federated_optimization (bool): Flag to enable Federated
+                Optimization.
+
+        Returns:
+            List[str]: A list of strings, where each string is the generated
+                Python code for a single layer of the pipeline.
+        """
         print("🚀 " + "="*68)
         print("ORCHESTRATOR AI: AUTONOMOUS EXECUTION")
         print(f"Project: {self.context.project}")
@@ -143,7 +175,13 @@ class OrchestratorAI:
 # ============================================================================
 
 def main():
-    """Main function to run the orchestrator from the command line."""
+    """Command-line entry point for the OrchestratorAI system.
+
+    This function parses command-line arguments, initializes the
+    OrchestrationContext and MetaLearner (loading from a file if specified),
+    creates the main OrchestratorAI engine, runs the orchestration process,
+    and saves the MetaLearner's state if requested.
+    """
     parser = argparse.ArgumentParser(description="OrchestratorAI: Autonomous Multi-Layer Script Orchestration System")
     parser.add_argument("--project", type=str, default="AutoCode_Genesis", help="Project name.")
     parser.add_argument("--objective", type=str, default="Generate a self-optimizing multi-layer data processing script", help="The main objective.")

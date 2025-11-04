@@ -1,6 +1,19 @@
 # OrchestratorAI
 
-OrchestratorAI is an autonomous multi-layer script orchestration system that uses a combination of Genetic Algorithms (GA), Reinforcement Learning (RL), and Attention Mechanisms to generate complex, multi-layered scripts.
+## Purpose
+
+OrchestratorAI is an autonomous system designed to translate high-level human objectives into functional, multi-layer software pipelines. It leverages a combination of artificial intelligence techniques to autonomously design, generate, verify, and learn from its own code. The primary goal of this project is to explore the potential of AI as an autonomous software engineer, capable of solving complex problems by composing and orchestrating multiple software components.
+
+## Architecture Overview
+
+The system is architected as a pipeline of intelligent agents, each responsible for a specific phase of the software development lifecycle:
+
+1.  **Meta-Learning**: The `MetaLearner` analyzes the user's objective and, based on past experience, selects an optimal strategy for the subsequent AI components. It uses an epsilon-greedy exploration strategy to balance exploiting known-good strategies with exploring new ones.
+2.  **Genetic Algorithm (GA)**: The `GAOptimizer` takes a set of base parameters and evolves them over several generations to find a robust starting point for the code generation process.
+3.  **Reinforcement Learning (RL)**: The `RLAgent` then fine-tunes these parameters, using a Q-learning algorithm to optimize them for the specific task.
+4.  **Intent-Driven Code Generation**: The `CodeGenerator` uses the final, optimized parameters to generate a series of scripts. Critically, it uses keyword matching on the user's objective to select the most logically appropriate code template for each layer of the pipeline.
+5.  **Pipeline Verification**: The `Verifier` performs a true end-to-end integration test of the generated pipeline. It executes the scripts in sequence, passing the output of each layer as the input to the next, to provide a high-fidelity assessment of the pipeline's quality.
+6.  **Self-Correction**: The results of the verification are fed back into the `MetaLearner`, closing the loop and enabling the system to learn from its successes and failures.
 
 ## Core Components
 
