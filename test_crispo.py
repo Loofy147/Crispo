@@ -150,7 +150,7 @@ class TestGAOptimizer(unittest.TestCase):
 
     def setUp(self):
         """Set up the GAOptimizer and a sample LayerParameters object."""
-        self.ga = GAOptimizer(population_size=10, mutation_rate=0.5)
+        self.ga = GAOptimizer(base_population_size=10, mutation_rate=0.5)
         self.template_params = LayerParameters(
             layer_id=0,
             weights={'complexity': 1.0, 'execution': 1.0},
@@ -161,7 +161,7 @@ class TestGAOptimizer(unittest.TestCase):
 
     def test_initialization(self):
         """Test that the GAOptimizer is initialized with the correct parameters."""
-        self.assertEqual(self.ga.population_size, 10)
+        self.assertEqual(self.ga.base_population_size, 10)
         self.assertEqual(self.ga.mutation_rate, 0.5)
 
     def test_execute(self):

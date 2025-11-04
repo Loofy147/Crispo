@@ -198,7 +198,6 @@ class Crispo:
                 problem_context=problem_context
             )
             print(f"  - Co-Designed Solution Competitive Ratio: {laa_metrics.get('competitive_ratio', 0.0):.2f}")
-            # Pass all the metrics from the LAA evaluation to the meta-learner
             success_metrics = laa_metrics
         else:
             # Fallback to the original pipeline verification
