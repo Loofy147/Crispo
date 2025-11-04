@@ -14,6 +14,7 @@ from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from datetime import datetime
+from solution_registry import save_solution
 
 # ============================================================================
 # CORE DATA STRUCTURES
@@ -149,11 +150,11 @@ class GAOptimizer:
 
         for gen in range(generations):
             fitness_scores = [self._evaluate_fitness(ind, context) for ind in population]
-            
+
             print(f"  [GA] Gen {gen + 1}: Best Fitness={max(fitness_scores):.3f}, Avg Fitness={sum(fitness_scores)/len(fitness_scores):.3f}")
 
             parents = self._tournament_selection(population, fitness_scores)
-            
+
             offspring = []
             for i in range(0, len(parents) - 1, 2):
                 child1, child2 = self._crossover(parents[i], parents[i+1])
@@ -263,7 +264,7 @@ class GAOptimizer:
         """
         if random.random() > self.crossover_rate:
             return parent1.clone(), parent2.clone()
-        
+
         child1, child2 = parent1.clone(), parent2.clone()
         weight_keys = list(parent1.weights.keys())
         crossover_point = random.randint(0, len(weight_keys))
@@ -360,7 +361,7 @@ class RLAgent:
             if episode_reward > best_reward:
                 best_reward = episode_reward
                 best_params = params.clone()
-        
+
         return best_params
 
     def _encode_state(self, params: LayerParameters, context: Dict) -> str:
@@ -517,7 +518,7 @@ class AttentionRouter:
             return {'attended_output': query, 'attention_weights': []}
 
         scores = [sum(q * k for q, k in zip(query, key)) / math.sqrt(self.embed_dim) for key in keys]
-        
+
         exp_scores = [math.exp(s) for s in scores]
         sum_exp = sum(exp_scores)
         attention_weights = [s / sum_exp for s in exp_scores]
@@ -545,7 +546,7 @@ class CodeGenerator:
     to select the most appropriate code template for a given layer.
     """
 
-    def generate(self, params: LayerParameters, layer_id: int, objective: str) -> str:
+    def generate(self, params: LayerParameters, layer_id: int, objective: str, trust_parameter: float = 0.8) -> str:
         """Selects and generates a script for a single layer.
 
         This method uses keyword matching on the user's objective to select
@@ -559,11 +560,19 @@ class CodeGenerator:
             layer_id (int): The ID of the current layer (e.g., 0, 1, 2).
             objective (str): The user's high-level objective string, used for
                 intent detection.
+            trust_parameter (float): The trust parameter (lambda) for
+                learning-augmented algorithms.
 
         Returns:
             str: A string containing the generated Python script.
         """
         objective = objective.lower()
+
+        # Check for LAA-specific objectives first
+        if "ski rental" in objective:
+            return self._generate_ski_rental_laa_template(params, trust_parameter)
+        if "one-max search" in objective:
+            return self._generate_one_max_laa_template(params, trust_parameter)
 
         # Layer 0: Prioritize fetching data
         if layer_id == 0 and any(kw in objective for kw in ['fetch', 'get', 'api', 'request']):
@@ -587,6 +596,202 @@ class CodeGenerator:
             return self._generate_api_template(params, layer_id)
 
         return self._generate_simple_template(params, layer_id)
+
+    def _generate_ski_rental_laa_template(self, params: LayerParameters, trust_parameter: float) -> str:
+        """Generates a script for the Ski Rental problem using a learning-augmented algorithm."""
+        return f'''"""
+Learning-Augmented Algorithm for the Ski Rental Problem
+"""
+import sys
+import json
+
+def ski_rental_algorithm(B, prediction_interval, trust_lambda, actual_days):
+    """
+    Executes the UQ-aware learning-augmented ski rental algorithm.
+
+    Args:
+        B (int): The cost to buy skis.
+        prediction_interval (List[int]): The predicted [lower, upper] bound
+            of skiing days.
+        trust_lambda (float): The trust parameter (lambda) between 0 and 1.
+        actual_days (int): The actual number of skiing days.
+
+    Returns:
+        int: The total cost incurred by the algorithm.
+    """
+    # Use the upper bound of the interval for a more robust threshold
+    prediction_upper_bound = prediction_interval[1]
+
+    # The core of the learning-augmented algorithm: a blended threshold
+    threshold = (1 - trust_lambda) * B + trust_lambda * min(prediction_upper_bound, B)
+
+    cost = 0
+    bought_skis = False
+    for day in range(1, actual_days + 1):
+        if day >= threshold and not bought_skis:
+            cost += B
+            bought_skis = True
+            break
+        else:
+            cost += 1 # Rent for the day
+
+    # If we never bought, the total cost is just the number of days we rented
+    if not bought_skis:
+        cost = actual_days
+
+    return cost
+
+def calculate_optimal_cost(B, actual_days):
+    """Calculates the optimal offline cost."""
+    return min(B, actual_days)
+
+def main():
+    """Main execution function."""
+    if len(sys.argv) != 5:
+        print("Usage: python ski_rental.py <buy_cost> '<prediction_interval>' <trust_lambda> <actual_days>")
+        sys.exit(1)
+
+    B = int(sys.argv[1])
+    prediction_interval = json.loads(sys.argv[2])
+    trust_lambda = float(sys.argv[3])
+    actual_days = int(sys.argv[4])
+
+    alg_cost = ski_rental_algorithm(B, prediction_interval, trust_lambda, actual_days)
+    opt_cost = calculate_optimal_cost(B, actual_days)
+
+    output = {{
+        "algorithm_cost": alg_cost,
+        "optimal_cost": opt_cost,
+        "competitive_ratio": alg_cost / opt_cost if opt_cost > 0 else 1
+    }}
+    print(json.dumps(output))
+
+if __name__ == "__main__":
+    main()
+'''
+
+    def _generate_predictor_template(self) -> str:
+        """Generates a script for a time-series predictor."""
+        return '''"""
+Time-Series Predictor for Learning-Augmented Algorithms
+"""
+import sys
+import json
+import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
+
+def train_and_predict(historical_data_path: str):
+    """
+    Trains a simple ARIMA model and outputs a UQ prediction interval.
+
+    Args:
+        historical_data_path (str): Path to a CSV with a 'value' column.
+
+    Returns:
+        List[int]: A [lower_bound, upper_bound] prediction interval.
+    """
+    try:
+        data = pd.read_csv(historical_data_path)
+        series = data['value']
+
+        # A simple ARIMA model
+        model = ARIMA(series, order=(5,1,0))
+        model_fit = model.fit()
+
+        # Forecast one step ahead
+        forecast = model_fit.get_forecast(steps=1)
+        pred_mean = forecast.predicted_mean.iloc[0]
+        pred_ci = forecast.conf_int().iloc[0]
+
+        lower_bound = int(pred_ci[0])
+        upper_bound = int(pred_ci[1])
+
+        # Ensure bounds are reasonable
+        lower_bound = max(1, lower_bound)
+        upper_bound = max(lower_bound, upper_bound)
+
+        return [lower_bound, upper_bound]
+
+    except Exception as e:
+        # Fallback on failure
+        print(f"Predictor failed: {e}", file=sys.stderr)
+        return [10, 20] # Return a safe, wide interval
+
+def main():
+    """Main execution function."""
+    if len(sys.argv) != 2:
+        print("Usage: python predictor.py <historical_data_path>")
+        sys.exit(1)
+
+    historical_data_path = sys.argv[1]
+    prediction_interval = train_and_predict(historical_data_path)
+    print(json.dumps(prediction_interval))
+
+if __name__ == "__main__":
+    main()
+'''
+
+    def _generate_one_max_laa_template(self, params: LayerParameters, trust_parameter: float) -> str:
+        """Generates a script for the One-Max Search problem using a learning-augmented algorithm."""
+        return f'''"""
+Learning-Augmented Algorithm for the One-Max Search Problem
+"""
+import sys
+import json
+import ast
+
+def one_max_algorithm(sequence, prediction_interval, trust_lambda):
+    """
+    Executes the UQ-aware learning-augmented one-max search algorithm.
+
+    Args:
+        sequence (List[int]): The sequence of values observed.
+        prediction_interval (List[int]): The predicted [lower, upper] bound
+            of the maximum value.
+        trust_lambda (float): The trust parameter (lambda) between 0 and 1.
+
+    Returns:
+        int: The value selected by the algorithm.
+    """
+    # Use the lower bound of the interval for a more conservative threshold
+    prediction_lower_bound = prediction_interval[0]
+
+    threshold = trust_lambda * prediction_lower_bound
+
+    for value in sequence:
+        if value >= threshold:
+            return value
+
+    # If no value meets the threshold, accept the last one (a robust strategy)
+    return sequence[-1] if sequence else 0
+
+def calculate_optimal_cost(sequence):
+    """Calculates the optimal offline cost (the true maximum)."""
+    return max(sequence) if sequence else 0
+
+def main():
+    """Main execution function."""
+    if len(sys.argv) != 4:
+        print("Usage: python one_max.py '<sequence>' '<prediction_interval>' <trust_lambda>")
+        sys.exit(1)
+
+    sequence = ast.literal_eval(sys.argv[1])
+    prediction_interval = ast.literal_eval(sys.argv[2])
+    trust_lambda = float(sys.argv[3])
+
+    alg_value = one_max_algorithm(sequence, prediction_interval, trust_lambda)
+    opt_value = calculate_optimal_cost(sequence)
+
+    output = {{
+        "algorithm_cost": alg_value, # In One-Max, "cost" is the value selected
+        "optimal_cost": opt_value,
+        "competitive_ratio": opt_value / alg_value if alg_value > 0 else float('inf')
+    }}
+    print(json.dumps(output))
+
+if __name__ == "__main__":
+    main()
+'''
 
     def _generate_high_complexity_template(self, params: LayerParameters, layer_id: int) -> str:
         """Generates a script for high-complexity data processing using NumPy.
@@ -847,6 +1052,79 @@ class MetaLearner:
 # VERIFICATION UNIT
 # ============================================================================
 
+class ProblemContext:
+    """Abstract base class for a problem context, used by the Verifier."""
+    def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
+        raise NotImplementedError
+
+    def get_perfect_prediction(self, scenario):
+        raise NotImplementedError
+
+    def get_worst_prediction(self, scenario):
+        raise NotImplementedError
+
+    def get_noisy_prediction(self, scenario, error_level):
+        raise NotImplementedError
+
+    def get_scenarios(self):
+        raise NotImplementedError
+
+class SkiRentalContext(ProblemContext):
+    """Problem context for the Ski Rental problem."""
+    def __init__(self, buy_cost=100, historical_data_path="ski_rental_history.csv"):
+        self.buy_cost = buy_cost
+        self.historical_data_path = historical_data_path
+
+    def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
+        actual_days = scenario
+        return ['python3', script_path, str(self.buy_cost), prediction, str(trust_parameter), str(actual_days)]
+
+    def get_perfect_prediction(self, scenario):
+        # Perfect UQ prediction is a tight interval around the true value
+        return [scenario, scenario]
+
+    def get_worst_prediction(self, scenario):
+        # Worst-case is a misleading interval
+        return [1, 2]
+
+    def get_noisy_prediction(self, scenario, error_level):
+        # Noisy prediction widens the interval based on error
+        perfect = self.get_perfect_prediction(scenario)
+        lower_bound = max(1, int(perfect[0] * (1 - error_level)))
+        upper_bound = int(perfect[1] * (1 + error_level))
+        return [lower_bound, upper_bound]
+
+    def get_scenarios(self):
+        return range(1, self.buy_cost * 2)
+
+class OneMaxSearchContext(ProblemContext):
+    """Problem context for the One-Max Search problem."""
+    def __init__(self, historical_data_path="one_max_history.csv"):
+        self.historical_data_path = historical_data_path
+
+    def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
+        sequence = scenario
+        return ['python3', script_path, str(sequence), prediction, str(trust_parameter)]
+
+    def get_perfect_prediction(self, scenario):
+        true_max = max(scenario) if scenario else 0
+        return [true_max, true_max]
+
+    def get_worst_prediction(self, scenario):
+        true_min = min(scenario) if scenario else 0
+        return [true_min, true_min]
+
+    def get_noisy_prediction(self, scenario, error_level):
+        perfect = self.get_perfect_prediction(scenario)[0]
+        lower_bound = int(perfect * (1 - error_level))
+        upper_bound = int(perfect * (1 + error_level))
+        return [lower_bound, upper_bound]
+
+    def get_scenarios(self):
+        # Generate some random sequences for evaluation
+        return [random.sample(range(1, 100), 10) for _ in range(20)]
+
+
 class Verifier:
     """Verifies the correctness of generated code.
 
@@ -960,3 +1238,55 @@ class Verifier:
 
         final_quality = total_quality / num_scripts if num_scripts > 0 else 0.0
         return {'overall_quality': final_quality}
+
+    def evaluate_learning_augmented_algorithm(
+        self,
+        algorithm_script_path: str,
+        predictor_script_path: str,
+        trust_parameter: float,
+        problem_context: ProblemContext
+    ) -> Dict[str, Any]:
+        """
+        Performs a two-stage, "live" evaluation of a full LAA solution package.
+
+        Args:
+            algorithm_script_path (str): Path to the generated algorithm script.
+            predictor_script_path (str): Path to the generated predictor script.
+            trust_parameter (float): The lambda value for the algorithm.
+            problem_context (ProblemContext): The context defining the problem.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the 'competitive_ratio' of
+                the full, co-designed solution.
+        """
+        # Stage 1: Run the predictor to get a live prediction
+        cmd_pred = ['python3', predictor_script_path, problem_context.historical_data_path]
+        result_pred = subprocess.run(cmd_pred, capture_output=True, text=True, timeout=20)
+        if result_pred.returncode != 0:
+            print(f"  [Verifier] Predictor script failed: {result_pred.stderr}")
+            return {'competitive_ratio': float('inf')}
+
+        live_prediction = result_pred.stdout.strip()
+
+        # Stage 2: Run the algorithm with the live prediction
+        # We use a single, representative scenario for this live evaluation
+        scenario = problem_context.get_scenarios()[0]
+        cmd_alg = problem_context.get_evaluation_command(
+            algorithm_script_path, live_prediction, trust_parameter, scenario
+        )
+        result_alg = subprocess.run(cmd_alg, capture_output=True, text=True, timeout=10)
+        if result_alg.returncode != 0:
+            print(f"  [Verifier] Algorithm script failed: {result_alg.stderr}")
+            return {'competitive_ratio': float('inf')}
+
+        metrics = json.loads(result_alg.stdout)
+
+        # Save the verified solution to the registry
+        problem_type = "ski_rental" if "ski" in algorithm_script_path else "one_max"
+        save_solution(
+            problem_type=problem_type,
+            performance_metrics=metrics
+        )
+        print(f"  [Registry] Saved solution for {problem_type} with competitive ratio: {metrics.get('competitive_ratio')}")
+
+        return metrics
