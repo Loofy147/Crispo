@@ -64,29 +64,23 @@ You can now use OrchestratorAI to generate self-contained algorithms for classic
 
 The system's `Verifier` will automatically evaluate the generated algorithm and output all of these key metrics, which are then recorded by the `MetaLearner`.
 
-### Generating a Learning-Augmented Algorithm
+### Generating a Full LAA Solution Package
 
-To generate an LAA, simply specify the problem in the objective. The system currently supports the **Ski Rental** and **One-Max Search** problems.
+OrchestratorAI has evolved into a full co-design system. When given an LAA objective, it generates a complete **Solution Package**:
+1.  **A Predictor Script:** A Python script that trains a time-series model on historical data to produce a real, Uncertainty-Quantified (UQ) prediction.
+2.  **An Algorithm Script:** The Learning-Augmented Algorithm, which is designed to consume the UQ prediction from the predictor.
 
-#### Ski Rental Example
+This package is then subjected to a realistic, two-stage "live" evaluation: the predictor is run, and its output is fed directly to the algorithm, giving a true measure of the co-designed system's performance.
+
+#### Example
 ```bash
+# This will generate generated_predictor.py and generated_algorithm.py,
+# then run them together to evaluate their combined performance.
 python3 orchestrator.py \
     --objective "Generate a learning-augmented algorithm for the ski rental problem" \
     --trust-parameter 0.8 \
     --save-metaknowledge laa_knowledge.pkl
 ```
-
-#### One-Max Search Example
-```bash
-python3 orchestrator.py \
-    --objective "Generate a learning-augmented algorithm for the one-max search problem" \
-    --trust-parameter 0.7 \
-    --save-metaknowledge laa_knowledge.pkl
-```
-
-This will produce a single, executable Python script that implements the specified learning-augmented algorithm. The `--trust-parameter` (lambda) allows you to control the trade-off between trusting the ML prediction and falling back on the robust classical strategy.
-
-A key feature of OrchestratorAI is its use of **Uncertainty-Quantified (UQ) Predictions**. Instead of relying on a single point prediction, the generated algorithms operate on a prediction *interval* (e.g., "the value will be between 90 and 110"). This makes the algorithms more robust to the inevitable errors in ML predictions, a principle drawn directly from the latest research.
 
 ### Example
 

@@ -150,12 +150,21 @@ class OrchestratorAI:
         generated_scripts = []
         pipeline_context = {}  # Initialize the data pipeline context
 
-        # If it's a learning-augmented algorithm, generate one script
+        # If it's a learning-augmented algorithm, generate a complete solution package
         objective = self.context.objective.lower()
         if "ski rental" in objective or "one-max search" in objective:
-            script = self.code_generator.generate(final_params, 0, self.context.objective, trust_parameter)
-            generated_scripts.append(script)
-            print("  - Generated Learning-Augmented Algorithm Script")
+            print("  - Generating a complete LAA Solution Package (Algorithm + Predictor)...")
+            algorithm_script = self.code_generator.generate(final_params, 0, self.context.objective, trust_parameter)
+            predictor_script = self.code_generator._generate_predictor_template()
+
+            # Save the package to disk
+            with open("generated_algorithm.py", "w") as f:
+                f.write(algorithm_script)
+            with open("generated_predictor.py", "w") as f:
+                f.write(predictor_script)
+
+            generated_scripts = [algorithm_script, predictor_script]
+            print("  - Solution Package saved to generated_algorithm.py and generated_predictor.py")
         else:
             for i in range(3): # Generate 3 layers for a standard pipeline
                 script = self.code_generator.generate(final_params, i, self.context.objective, trust_parameter)
@@ -177,21 +186,15 @@ class OrchestratorAI:
             problem_context = OneMaxSearchContext()
 
         if problem_context:
-            laa_script = generated_scripts[0]
-            error_levels = [0.1, 0.25, 0.5, 0.75, 1.0] # Define error levels to test
+            # The new verifier takes the paths to the generated scripts
             laa_metrics = self.verifier.evaluate_learning_augmented_algorithm(
-                script_code=laa_script,
+                algorithm_script_path="generated_algorithm.py",
+                predictor_script_path="generated_predictor.py",
                 trust_parameter=trust_parameter,
-                problem_context=problem_context,
-                error_levels=error_levels
+                problem_context=problem_context
             )
-            print(f"  - LAA Consistency (Error=0%): {laa_metrics['consistency']:.2f}-competitive")
-            print(f"  - LAA Robustness (Worst-Case Error): {laa_metrics['robustness']:.2f}-competitive")
-            print(f"  - LAA Brittleness Detected: {laa_metrics['is_brittle']}")
-            print("  - LAA Smoothness Profile:")
-            for error, ratio in sorted(laa_metrics['smoothness_profile'].items()):
-                print(f"    - Error Level {int(error*100)}%: {ratio:.2f}-competitive")
-            success_metrics = laa_metrics
+            print(f"  - Co-Designed Solution Competitive Ratio: {laa_metrics['competitive_ratio']:.2f}")
+            success_metrics = {'competitive_ratio': laa_metrics['competitive_ratio']}
         else:
             # Fallback to the original pipeline verification
             metrics = self.verifier.verify_pipeline(generated_scripts)

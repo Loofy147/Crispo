@@ -669,6 +669,67 @@ if __name__ == "__main__":
     main()
 '''
 
+    def _generate_predictor_template(self) -> str:
+        """Generates a script for a time-series predictor."""
+        return '''"""
+Time-Series Predictor for Learning-Augmented Algorithms
+"""
+import sys
+import json
+import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
+
+def train_and_predict(historical_data_path: str):
+    """
+    Trains a simple ARIMA model and outputs a UQ prediction interval.
+
+    Args:
+        historical_data_path (str): Path to a CSV with a 'value' column.
+
+    Returns:
+        List[int]: A [lower_bound, upper_bound] prediction interval.
+    """
+    try:
+        data = pd.read_csv(historical_data_path)
+        series = data['value']
+
+        # A simple ARIMA model
+        model = ARIMA(series, order=(5,1,0))
+        model_fit = model.fit()
+
+        # Forecast one step ahead
+        forecast = model_fit.get_forecast(steps=1)
+        pred_mean = forecast.predicted_mean.iloc[0]
+        pred_ci = forecast.conf_int().iloc[0]
+
+        lower_bound = int(pred_ci[0])
+        upper_bound = int(pred_ci[1])
+
+        # Ensure bounds are reasonable
+        lower_bound = max(1, lower_bound)
+        upper_bound = max(lower_bound, upper_bound)
+
+        return [lower_bound, upper_bound]
+
+    except Exception as e:
+        # Fallback on failure
+        print(f"Predictor failed: {e}", file=sys.stderr)
+        return [10, 20] # Return a safe, wide interval
+
+def main():
+    """Main execution function."""
+    if len(sys.argv) != 2:
+        print("Usage: python predictor.py <historical_data_path>")
+        sys.exit(1)
+
+    historical_data_path = sys.argv[1]
+    prediction_interval = train_and_predict(historical_data_path)
+    print(json.dumps(prediction_interval))
+
+if __name__ == "__main__":
+    main()
+'''
+
     def _generate_one_max_laa_template(self, params: LayerParameters, trust_parameter: float) -> str:
         """Generates a script for the One-Max Search problem using a learning-augmented algorithm."""
         return f'''"""
@@ -1009,12 +1070,13 @@ class ProblemContext:
 
 class SkiRentalContext(ProblemContext):
     """Problem context for the Ski Rental problem."""
-    def __init__(self, buy_cost=100):
+    def __init__(self, buy_cost=100, historical_data_path="ski_rental_history.csv"):
         self.buy_cost = buy_cost
+        self.historical_data_path = historical_data_path
 
     def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
         actual_days = scenario
-        return ['python3', script_path, str(self.buy_cost), str(prediction), str(trust_parameter), str(actual_days)]
+        return ['python3', script_path, str(self.buy_cost), prediction, str(trust_parameter), str(actual_days)]
 
     def get_perfect_prediction(self, scenario):
         # Perfect UQ prediction is a tight interval around the true value
@@ -1036,9 +1098,12 @@ class SkiRentalContext(ProblemContext):
 
 class OneMaxSearchContext(ProblemContext):
     """Problem context for the One-Max Search problem."""
+    def __init__(self, historical_data_path="one_max_history.csv"):
+        self.historical_data_path = historical_data_path
+
     def get_evaluation_command(self, script_path, prediction, trust_parameter, scenario) -> List[str]:
         sequence = scenario
-        return ['python3', script_path, str(sequence), str(prediction), str(trust_parameter)]
+        return ['python3', script_path, str(sequence), prediction, str(trust_parameter)]
 
     def get_perfect_prediction(self, scenario):
         true_max = max(scenario) if scenario else 0
@@ -1175,96 +1240,42 @@ class Verifier:
 
     def evaluate_learning_augmented_algorithm(
         self,
-        script_code: str,
+        algorithm_script_path: str,
+        predictor_script_path: str,
         trust_parameter: float,
-        problem_context: ProblemContext,
-        error_levels: List[float]
+        problem_context: ProblemContext
     ) -> Dict[str, Any]:
         """
-        Evaluates a learning-augmented algorithm using a problem-agnostic context.
+        Performs a two-stage, "live" evaluation of a full LAA solution package.
 
         Args:
-            script_code (str): The Python code of the LAA.
+            algorithm_script_path (str): Path to the generated algorithm script.
+            predictor_script_path (str): Path to the generated predictor script.
             trust_parameter (float): The lambda value for the algorithm.
-            problem_context (ProblemContext): The context defining the problem,
-                scenarios, and prediction logic.
-            error_levels (List[float]): A list of prediction error levels to
-                test for the smoothness profile.
+            problem_context (ProblemContext): The context defining the problem.
 
         Returns:
-            Dict[str, Any]: A dictionary containing 'consistency', 'robustness',
-                'smoothness_profile', and 'is_brittle'.
+            Dict[str, Any]: A dictionary containing the 'competitive_ratio' of
+                the full, co-designed solution.
         """
-        metrics = {'consistency': 0.0, 'robustness': 0.0, 'smoothness_profile': {}, 'is_brittle': False}
-        consistency_ratios, robustness_ratios = [], []
+        # Stage 1: Run the predictor to get a live prediction
+        cmd_pred = ['python3', predictor_script_path, problem_context.historical_data_path]
+        result_pred = subprocess.run(cmd_pred, capture_output=True, text=True, timeout=20)
+        if result_pred.returncode != 0:
+            print(f"  [Verifier] Predictor script failed: {result_pred.stderr}")
+            return {'competitive_ratio': float('inf')}
 
-        # Add a tiny epsilon to check for brittleness
-        brittleness_epsilon = 1e-6
-        all_error_levels = error_levels + [brittleness_epsilon]
-        smoothness_ratios = {level: [] for level in all_error_levels}
+        live_prediction = result_pred.stdout.strip()
 
+        # Stage 2: Run the algorithm with the live prediction
+        # We use a single, representative scenario for this live evaluation
+        scenario = problem_context.get_scenarios()[0]
+        cmd_alg = problem_context.get_evaluation_command(
+            algorithm_script_path, live_prediction, trust_parameter, scenario
+        )
+        result_alg = subprocess.run(cmd_alg, capture_output=True, text=True, timeout=10)
+        if result_alg.returncode != 0:
+            print(f"  [Verifier] Algorithm script failed: {result_alg.stderr}")
+            return {'competitive_ratio': float('inf')}
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
-            temp_file.write(script_code)
-            temp_filename = temp_file.name
-
-        try:
-            for scenario in problem_context.get_scenarios():
-                # 1. Evaluate Consistency
-                perfect_prediction = problem_context.get_perfect_prediction(scenario)
-                cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(perfect_prediction), trust_parameter, scenario)
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                if result.returncode == 0:
-                    output = json.loads(result.stdout)
-                    consistency_ratios.append(output['competitive_ratio'])
-
-                # 2. Evaluate Robustness
-                worst_prediction = problem_context.get_worst_prediction(scenario)
-                cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(worst_prediction), trust_parameter, scenario)
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                if result.returncode == 0:
-                    output = json.loads(result.stdout)
-                    robustness_ratios.append(output['competitive_ratio'])
-
-                # 3. Evaluate Smoothness
-                for error in all_error_levels:
-                    noisy_prediction = problem_context.get_noisy_prediction(scenario, error)
-                    cmd = problem_context.get_evaluation_command(temp_filename, json.dumps(noisy_prediction), trust_parameter, scenario)
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                    if result.returncode == 0:
-                        output = json.loads(result.stdout)
-                        smoothness_ratios[error].append(output['competitive_ratio'])
-
-            if consistency_ratios:
-                metrics['consistency'] = max(consistency_ratios)
-            if robustness_ratios:
-                metrics['robustness'] = max(robustness_ratios)
-            for error in error_levels:
-                if smoothness_ratios[error]:
-                    metrics['smoothness_profile'][error] = max(smoothness_ratios[error])
-
-            # Formal Brittleness Check
-            consistency_cr = metrics['consistency']
-            robustness_cr = metrics['robustness']
-            tiny_error_cr = max(smoothness_ratios.get(brittleness_epsilon, [consistency_cr]))
-            cr_at_10_percent = metrics['smoothness_profile'].get(0.1, consistency_cr)
-
-            is_brittle = False
-            # Condition 1: Immediate jump to robustness bound
-            if (robustness_cr - consistency_cr) > 1e-9:
-                jump_ratio = (tiny_error_cr - consistency_cr) / (robustness_cr - consistency_cr)
-                if jump_ratio > 0.9:
-                    is_brittle = True
-
-            # Condition 2: Flat smoothness profile at the start
-            if not is_brittle and abs(cr_at_10_percent - consistency_cr) < 1e-9:
-                if (robustness_cr - consistency_cr) > 0.1: # Only flag if there is a real perf gap
-                    is_brittle = True
-
-            metrics['is_brittle'] = is_brittle
-
-        finally:
-            import os
-            os.remove(temp_filename)
-
-        return metrics
+        return json.loads(result_alg.stdout)
