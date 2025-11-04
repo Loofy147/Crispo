@@ -335,6 +335,7 @@ class CodeGenerator:
         if complexity > 0.8:
             template = f'''# Layer {layer_id}: High-Complexity Data Processing
 import numpy as np
+import json
 
 class Layer{layer_id}System:
     def __init__(self):
@@ -342,64 +343,79 @@ class Layer{layer_id}System:
         self.biases = np.array({list(params.biases.values())})
         self.temp = {params.temperature:.2f}
 
-    def process(self, data):
+    def process(self, input_context):
+        data = np.array(input_context.get('data', []))
         # Apply a non-linear transformation
         transformed_data = np.tanh(np.dot(data, self.weights.T) + self.biases)
-        return transformed_data * self.temp
+        output_context = {{'data': transformed_data.tolist()}}
+        return output_context
 
 if __name__ == '__main__':
     system = Layer{layer_id}System()
-    # Example usage with mock data that matches the expected input shape
-    mock_data = np.random.rand(1, {len(params.weights)})
-    result = system.process(mock_data)
-    print(f"Layer {layer_id} processed result: {{result}}")
+    # Example usage with mock data
+    mock_input_context = {{'data': np.random.rand(1, {len(params.weights)}).tolist()}}
+    result = system.process(mock_input_context)
+    print(json.dumps(result))
 '''
         elif complexity > 0.5:
             template = f'''# Layer {layer_id}: Data Transformation
 import pandas as pd
+import json
 
-def process_layer_{layer_id}(data):
+def process_layer_{layer_id}(input_context):
+    data = input_context.get('data', {{}})
     df = pd.DataFrame(data)
     # Perform a simple data transformation
-    df['new_col'] = df.iloc[:, 0] * {params.weights.get('execution', 1.0):.2f}
-    return df.to_dict('records')
+    if not df.empty:
+        df['new_col'] = df.iloc[:, 0] * {params.weights.get('execution', 1.0):.2f}
+    output_context = {{'data': df.to_dict('records')}}
+    return output_context
 
 if __name__ == '__main__':
     # Example usage with mock data
-    mock_data = {{'col1': [1, 2, 3], 'col2': [4, 5, 6]}}
-    result = process_layer_{layer_id}(mock_data)
-    print(f"Layer {layer_id} processed result: {{result}}")
+    mock_input_context = {{'data': {{'col1': [1, 2, 3], 'col2': [4, 5, 6]}}}}
+    result = process_layer_{layer_id}(mock_input_context)
+    print(json.dumps(result))
 '''
         elif complexity > 0.2:
             template = f'''# Layer {layer_id}: API Interaction
 import requests
+import json
 
-def process_layer_{layer_id}(api_endpoint):
+def process_layer_{layer_id}(input_context):
+    api_endpoint = input_context.get('api_endpoint', '')
     try:
         response = requests.get(api_endpoint, timeout=5)
         response.raise_for_status()
-        return response.json()
+        output_context = {{'data': response.json()}}
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data: {{e}}")
-        return None
+        output_context = {{'data': [], 'error': str(e)}}
+    return output_context
 
 if __name__ == '__main__':
     # Example usage with a mock API endpoint
-    mock_api = 'https://jsonplaceholder.typicode.com/todos/1'
-    result = process_layer_{layer_id}(mock_api)
-    print(f"Layer {layer_id} processed result: {{result}}")
+    mock_input_context = {{'api_endpoint': 'https://jsonplaceholder.typicode.com/todos/1'}}
+    result = process_layer_{layer_id}(mock_input_context)
+    print(json.dumps(result))
 '''
         else:
             template = f'''# Layer {layer_id}: Simple Processing
-def process_layer_{layer_id}(data):
+import json
+
+def process_layer_{layer_id}(input_context):
+    data = input_context.get('data', 0)
     weight = {params.weights.get("execution", 1.0):.2f}
     bias = {params.biases.get("execution", 0.0):.2f}
-    return data * weight + bias
+    result = data * weight + bias
+    output_context = {{'data': result}}
+    return output_context
 
 if __name__ == '__main__':
     # Example usage with mock data
-    result = process_layer_{layer_id}(10)
-    print(f"Layer {layer_id} processed result: {{result}}")
+    mock_input_context = {{'data': 10}}
+    result = process_layer_{layer_id}(mock_input_context)
+    print(json.dumps(result))
 '''
         return template
 
@@ -532,3 +548,43 @@ class Verifier:
         metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
 
         return metrics
+
+    def verify_pipeline(self, script_codes: List[str]) -> Dict[str, float]:
+        """
+        Verifies a full pipeline by executing scripts sequentially and passing
+        the context between them.
+        """
+        pipeline_context = {}
+        total_quality = 0.0
+        num_scripts = len(script_codes)
+
+        for i, script_code in enumerate(script_codes):
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+                # Inject the input context into the script
+                injected_code = f"import json\npipeline_context = {json.dumps(pipeline_context)}\n" + script_code
+                temp_file.write(injected_code)
+                temp_filename = temp_file.name
+
+            try:
+                result = subprocess.run(
+                    ['python3', temp_filename],
+                    capture_output=True,
+                    text=True,
+                    timeout=15
+                )
+
+                if result.returncode == 0:
+                    total_quality += 1.0
+                    # Parse the output to get the next context
+                    pipeline_context = json.loads(result.stdout)
+                else:
+                    # Stop the pipeline on the first failure
+                    print(f"Pipeline failed at layer {i}.")
+                    break
+
+            finally:
+                import os
+                os.remove(temp_filename)
+
+        final_quality = total_quality / num_scripts if num_scripts > 0 else 0.0
+        return {'overall_quality': final_quality}
