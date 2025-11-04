@@ -10,9 +10,6 @@ import math
 import re
 import subprocess
 import tempfile
-import sys
-import resource
-from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
@@ -117,18 +114,18 @@ class GAOptimizer:
     from one generation is carried over to the next.
     """
 
-    def __init__(self, population_size: int = 20, mutation_rate: float = 0.15, crossover_rate: float = 0.7):
+    def __init__(self, base_population_size: int = 20, mutation_rate: float = 0.15, crossover_rate: float = 0.7):
         """Initializes the GAOptimizer.
 
         Args:
-            population_size (int): The number of individuals (parameter sets)
-                in each generation.
+            base_population_size (int): The base number of individuals for a
+                low-complexity problem.
             mutation_rate (float): The probability of an individual's genes
                 (parameters) being randomly altered.
             crossover_rate (float): The probability that two parents will
                 exchange genetic material to create offspring.
         """
-        self.population_size = population_size
+        self.base_population_size = base_population_size
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
 
@@ -149,10 +146,12 @@ class GAOptimizer:
             LayerParameters: The best LayerParameters instance found after all
                 generations.
         """
-        population = self._initialize_population(template_params)
+        complexity = context.get('desired_complexity', 0.5)
+        population_size = int(self.base_population_size * (1 + complexity))
+        population = self._initialize_population(template_params, population_size)
 
         for gen in range(generations):
-            fitness_scores = self._evaluate_population_parallel(population, context)
+            fitness_scores = [self._evaluate_fitness(ind, context) for ind in population]
 
             print(f"  [GA] Gen {gen + 1}: Best Fitness={max(fitness_scores):.3f}, Avg Fitness={sum(fitness_scores)/len(fitness_scores):.3f}")
 
@@ -176,44 +175,29 @@ class GAOptimizer:
             # sorted by fitness
             sorted_population = [x for _, x in sorted(zip(fitness_scores, population), key=lambda pair: pair[0], reverse=True)]
 
-            fill_count = self.population_size - len(new_population)
+            fill_count = population_size - len(new_population)
             if fill_count > 0:
                 new_population.extend(sorted_population[:fill_count])
 
-            population = new_population[:self.population_size]
+            population = new_population[:population_size]
 
 
-        final_fitness = self._evaluate_population_parallel(population, context)
+        final_fitness = [self._evaluate_fitness(ind, context) for ind in population]
         best_idx = final_fitness.index(max(final_fitness))
         return population[best_idx]
 
-    def _evaluate_population_parallel(self, population: List[LayerParameters], context: Dict) -> List[float]:
-        """
-        Evaluates the fitness of a population in parallel using a process pool.
-        """
-        with ProcessPoolExecutor(max_workers=4) as executor:
-            # Create a list of tuples, where each tuple is the arguments for one call
-            # to _evaluate_fitness. This is necessary because executor.map only
-            # works with functions that take a single argument.
-            args = [(ind, context) for ind in population]
-            fitness_scores = list(executor.map(self._evaluate_fitness_unpack, args))
-        return fitness_scores
-
-    def _evaluate_fitness_unpack(self, args: Tuple[LayerParameters, Dict]) -> float:
-        """Helper function to unpack arguments for parallel execution."""
-        return self._evaluate_fitness(*args)
-
-    def _initialize_population(self, template: LayerParameters) -> List[LayerParameters]:
+    def _initialize_population(self, template: LayerParameters, population_size: int) -> List[LayerParameters]:
         """Creates an initial population of LayerParameters.
 
         Args:
             template: The LayerParameters instance to use as a template.
+            population_size: The number of individuals to create.
 
         Returns:
             A list of new LayerParameters instances with randomized attributes.
         """
         population = []
-        for _ in range(self.population_size):
+        for _ in range(population_size):
             individual = template.clone()
             for key in individual.weights:
                 individual.weights[key] *= random.uniform(0.5, 1.5)
@@ -381,35 +365,7 @@ class RLAgent:
                 best_reward = episode_reward
                 best_params = params.clone()
 
-            self.prune_q_table()
-
         return best_params
-
-    def prune_q_table(self, keep_top_n: int = 1000):
-        """
-        Prunes the Q-table to prevent unbounded growth, keeping only the
-        entries with the highest Q-values.
-        """
-        if not self.q_table:
-            return
-
-        # Flatten the Q-table into a list of (state, action, q_value) tuples
-        all_pairs = []
-        for state, actions in self.q_table.items():
-            for action, q_val in actions.items():
-                all_pairs.append((state, action, q_val))
-
-        # Sort by Q-value in descending order
-        all_pairs.sort(key=lambda x: x[2], reverse=True)
-
-        # Rebuild the Q-table with only the top N pairs
-        pruned_q_table = {}
-        for state, action, q_val in all_pairs[:keep_top_n]:
-            if state not in pruned_q_table:
-                pruned_q_table[state] = {}
-            pruned_q_table[state][action] = q_val
-
-        self.q_table = pruned_q_table
 
     def _encode_state(self, params: LayerParameters, context: Dict) -> str:
         """Encodes the current state into a string for Q-table lookup.
@@ -1020,54 +976,45 @@ class MetaLearner:
         )
 
     def get_optimal_strategy(self, project_type: str, complexity: float) -> Dict[str, Any]:
+        """Selects a strategy for a new task using an epsilon-greedy approach.
+
+        With probability epsilon, it will explore a random strategy. Otherwise,
+        it will exploit the strategy with the best historical performance for
+        the given project type.
+
+        Args:
+            project_type (str): The type of the project (e.g., 'data_pipeline')
+                for which to select a strategy.
+            complexity (float): The complexity of the project, used to scale
+                strategy parameters.
+
+        Returns:
+            Dict[str, Any]: A dictionary defining the selected strategy's
+                parameters (e.g., {'ga_generations': 10, 'rl_episodes': 5}).
         """
-        Selects an optimal strategy using the UCB1 algorithm to balance
-        exploration and exploitation.
-        """
-        # If there's no history for this project type, use the default strategy.
+        # 1. Decide whether to explore or exploit
+        if random.random() < self.epsilon:
+            print("  [MetaLearner] Exploring a random strategy.")
+            strategy_name = random.choice(self.available_strategies)
+            return self._decode_strategy(strategy_name, complexity)
+
+        # 2. If exploiting, check for existing knowledge
         if project_type not in self.strategy_performance:
             print("  [MetaLearner] No history for project type, using default strategy.")
             return self._default_strategy(complexity)
 
-        # With a low probability, explore a random strategy anyway
-        if random.random() < self.epsilon:
-            print("  [MetaLearner] Exploring a random strategy (epsilon-triggered).")
-            strategy_name = random.choice(self.available_strategies)
-            return self._decode_strategy(strategy_name, complexity)
+        # 3. Exploit the best-known strategy
+        print("  [MetaLearner] Exploiting the best-known strategy.")
+        best_strategy = "balanced"
+        best_performance = float('-inf')
 
-        strategy_name = self._ucb1_select(project_type)
-        print(f"  [MetaLearner] Selected strategy via UCB1: {strategy_name}")
-        return self._decode_strategy(strategy_name, complexity)
-
-    def _ucb1_select(self, project_type: str) -> str:
-        """
-        Selects a strategy using the Upper Confidence Bound (UCB1) formula.
-        """
-        total_pulls = sum(len(perfs) for perfs in self.strategy_performance[project_type].values())
-
-        # Ensure total_pulls is not zero to avoid log(0)
-        if total_pulls == 0:
-            return random.choice(self.available_strategies)
-
-        best_strategy = None
-        max_ucb = float('-inf')
-
-        for strategy in self.available_strategies:
-            performances = self.strategy_performance[project_type].get(strategy)
-
-            if not performances:
-                # If a strategy has never been tried, it gets infinite UCB
-                return strategy
-
-            avg_perf = sum(performances) / len(performances)
-            exploration_bonus = math.sqrt(2 * math.log(total_pulls) / len(performances))
-            ucb = avg_perf + exploration_bonus
-
-            if ucb > max_ucb:
-                max_ucb = ucb
+        for strategy, performances in self.strategy_performance[project_type].items():
+            avg_performance = sum(performances) / len(performances)
+            if avg_performance > best_performance:
+                best_performance = avg_performance
                 best_strategy = strategy
 
-        return best_strategy if best_strategy else random.choice(self.available_strategies)
+        return self._decode_strategy(best_strategy, complexity)
 
     def _infer_strategy(self, config: Dict[str, Any]) -> str:
         """Infers the name of a strategy from its configuration parameters.
@@ -1191,27 +1138,6 @@ class OneMaxSearchContext(ProblemContext):
         return [random.sample(range(1, 100), 10) for _ in range(20)]
 
 
-def set_resource_limits():
-    """Sets memory limits for subprocesses to prevent resource exhaustion."""
-    # Set maximum virtual memory to 500 MB
-    resource.setrlimit(resource.RLIMIT_AS, (500 * 1024 * 1024, 500 * 1024 * 1024))
-
-def safe_write(filename: str, content: str, allowed_dir: str = "/app"):
-    """
-    Safely writes content to a file, ensuring it's within an allowed directory.
-    """
-    import os
-
-    filepath = os.path.join(allowed_dir, os.path.basename(filename))
-
-    # Final check to prevent any directory traversal
-    if '..' in filepath or not filepath.startswith(allowed_dir):
-        raise ValueError("Invalid filename provided for safe write.")
-
-    with open(filepath, 'w') as f:
-        f.write(content)
-    return filepath
-
 class Verifier:
     """Verifies the correctness of generated code.
 
@@ -1242,19 +1168,17 @@ class Verifier:
         except SyntaxError:
             return metrics  # No point in trying to run if syntax is wrong
 
-        temp_filename = "temp_script.py"
-        safe_filepath = safe_write(temp_filename, script_code)
-
-        preexec_fn = set_resource_limits if sys.platform != "win32" else None
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write(script_code)
+            temp_filename = temp_file.name
 
         try:
             # Execute the script as a subprocess
             result = subprocess.run(
-                ['python3', safe_filepath],
+                ['python3', temp_filename],
                 capture_output=True,
                 text=True,
-                timeout=10, # Add a timeout to prevent long-running scripts
-                preexec_fn=preexec_fn
+                timeout=10 # Add a timeout to prevent long-running scripts
             )
 
             # A non-zero return code indicates a runtime error
@@ -1266,13 +1190,12 @@ class Verifier:
             print("Error: python3 interpreter not found.")
 
         except subprocess.TimeoutExpired:
-            print(f"Verification timeout for script: {safe_filepath}")
+            print(f"Verification timeout for script: {temp_filename}")
 
         finally:
             # Clean up the temporary file
             import os
-            if os.path.exists(safe_filepath):
-                os.remove(safe_filepath)
+            os.remove(temp_filename)
 
         # Calculate overall quality
         metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
@@ -1297,20 +1220,20 @@ class Verifier:
         pipeline_context = {}
         total_quality = 0.0
         num_scripts = len(script_codes)
-        preexec_fn = set_resource_limits if sys.platform != "win32" else None
 
         for i, script_code in enumerate(script_codes):
-            injected_code = f"import json\npipeline_context = {json.dumps(pipeline_context)}\n" + script_code
-            temp_filename = f"temp_pipeline_step_{i}.py"
-            safe_filepath = safe_write(temp_filename, injected_code)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+                # Inject the input context into the script
+                injected_code = f"import json\npipeline_context = {json.dumps(pipeline_context)}\n" + script_code
+                temp_file.write(injected_code)
+                temp_filename = temp_file.name
 
             try:
                 result = subprocess.run(
-                    ['python3', safe_filepath],
+                    ['python3', temp_filename],
                     capture_output=True,
                     text=True,
-                    timeout=15,
-                    preexec_fn=preexec_fn
+                    timeout=15
                 )
 
                 if result.returncode == 0:
@@ -1324,8 +1247,7 @@ class Verifier:
 
             finally:
                 import os
-                if os.path.exists(safe_filepath):
-                    os.remove(safe_filepath)
+                os.remove(temp_filename)
 
         final_quality = total_quality / num_scripts if num_scripts > 0 else 0.0
         return {'overall_quality': final_quality}
