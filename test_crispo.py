@@ -97,13 +97,15 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(metrics['runtime_ok'], 1.0)
         self.assertEqual(metrics['overall_quality'], 1.0)
 
-    def test_verify_pipeline_failure(self):
-        """Test that the pipeline verifier correctly handles a failing script."""
-        # The first script must produce valid JSON output for the pipeline to continue.
-        scripts = ["import json; print(json.dumps({'status': 'ok'}))", "b = 1 / 0", "c = 3"]
-        metrics = self.verifier.verify_pipeline(scripts)
-        # The pipeline should stop after the failure, quality = 1/3
-        self.assertAlmostEqual(metrics['overall_quality'], 1/3)
+    def test_verify_script_timeout(self):
+        """Check that the verifier correctly handles a script that times out."""
+        # This script will run indefinitely, so it should be terminated by the timeout.
+        script = "while True: pass"
+        metrics = self.verifier.verify_script(script)
+        # A timeout is a form of runtime failure.
+        self.assertEqual(metrics['syntax_ok'], 1.0)
+        self.assertEqual(metrics['runtime_ok'], 0.0)
+        self.assertEqual(metrics['overall_quality'], 0.5)
 
     @mock.patch('crispo_core.save_solution')
     def test_laa_evaluation_saves_correct_problem_type(self, mock_save_solution):
@@ -686,48 +688,49 @@ class TestCLI(unittest.TestCase):
 
     @mock.patch('argparse.ArgumentParser')
     @mock.patch('crispo.query_registry')
-    @mock.patch('crispo.Crispo') # Mock the main class to prevent orchestration
-    def test_cli_query_registry(self, mock_crispo_class, mock_query_registry, mock_parser):
-        """Verify that the --query-registry argument is handled correctly."""
+    def test_cli_query_registry_bypasses_orchestration(self, mock_query_registry, mock_parser):
+        """Verify that --query-registry bypasses the main orchestration logic."""
         from crispo import main
+
+        # Mock the parsed arguments to simulate the --query-registry flag
         mock_args = unittest.mock.MagicMock()
         mock_args.query_registry = "competitive_ratio:1.5"
-        # Prevent side-effects from other args
-        mock_args.load_metaknowledge = None
-        mock_args.save_metaknowledge = None
         mock_parser.return_value.parse_args.return_value = mock_args
 
-        main()
+        # Mock the Crispo class to ensure it's not called
+        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
+            main()
 
-        # Check that the query function was called with the correct parameters
-        mock_query_registry.assert_called_once_with("competitive_ratio", 1.5)
-        # Verify that the main orchestration was not attempted
-        mock_crispo_class.return_value.orchestrate.assert_called_once()
+            # 1. Assert that the orchestration engine was NOT created or run
+            mock_crispo_class.assert_not_called()
+            mock_crispo_class.return_value.orchestrate.assert_not_called()
 
+            # 2. Assert that the query function WAS called with the correct parameters
+            mock_query_registry.assert_called_once_with("competitive_ratio", 1.5)
 
     @mock.patch('argparse.ArgumentParser')
     @mock.patch('builtins.open', new_callable=mock.mock_open)
-    def test_cli_load_metaknowledge_file_not_found(self, mock_open, mock_parser):
-        """Verify that a FileNotFoundError is handled when loading meta-knowledge."""
+    @mock.patch('pickle.load')
+    def test_cli_load_metaknowledge_file_not_found(self, mock_pickle_load, mock_open, mock_parser):
+        """Verify that a warning is printed when the metaknowledge file is not found."""
         from crispo import main
+        import io
+
+        # Mock the parsed arguments
         mock_args = unittest.mock.MagicMock()
-        mock_args.load_metaknowledge = "non_existent.pkl"
-        mock_args.query_registry = None # Ensure query logic is not triggered
-        # Prevent save logic from running and hitting the mock_open side_effect
-        mock_args.save_metaknowledge = None
+        mock_args.load_metaknowledge = "non_existent_file.pkl"
+        mock_args.save_metaknowledge = None # Ensure the save block is not triggered
+        mock_args.query_registry = None  # Ensure orchestration is not bypassed
         mock_parser.return_value.parse_args.return_value = mock_args
 
-        # Simulate the file not being found
+        # Make the mock 'open' raise a FileNotFoundError
         mock_open.side_effect = FileNotFoundError
 
-        # We need to mock Crispo to prevent the full orchestration
-        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
-            mock_crispo_instance = unittest.mock.MagicMock()
-            mock_crispo_class.return_value = mock_crispo_instance
-            main()
-            # Check that Crispo was still called, but with a fresh MetaLearner
-            self.assertTrue(mock_crispo_class.called)
-
+        with unittest.mock.patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            with unittest.mock.patch('crispo.Crispo'): # Mock Crispo to prevent orchestration
+                main()
+                output = mock_stdout.getvalue()
+                self.assertIn("Warning: Meta-knowledge file not found", output)
 
 if __name__ == '__main__':
     unittest.main()

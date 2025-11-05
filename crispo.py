@@ -249,35 +249,7 @@ def main():
 
     args = parser.parse_args()
 
-    context = OrchestrationContext(
-        project=args.project,
-        objective=args.objective
-    )
-
-    # Initialize or load the MetaLearner
-    if args.load_metaknowledge:
-        try:
-            with open(args.load_metaknowledge, 'rb') as f:
-                meta_learner = pickle.load(f)
-            print(f"🧠 Meta-knowledge loaded from {args.load_metaknowledge}")
-        except (FileNotFoundError, pickle.UnpicklingError):
-            print("⚠️  Could not load meta-knowledge, starting fresh.")
-            meta_learner = MetaLearner()
-    else:
-        meta_learner = MetaLearner()
-
-    crispo = Crispo(context, meta_learner)
-    final_scripts = crispo.orchestrate(
-        project_type=args.project_type,
-        domain=args.domain,
-        complexity=args.complexity,
-        enable_transfer_learning=args.enable_transfer_learning,
-        enable_nas=args.enable_nas,
-        enable_federated_optimization=args.enable_federated_optimization,
-        trust_parameter=args.trust_parameter
-    )
-
-    # Handle registry query if requested
+    # Handle registry query if requested and exit immediately.
     if args.query_registry:
         try:
             metric, threshold_str = args.query_registry.split(':')
@@ -294,10 +266,41 @@ def main():
                 for res in results:
                     print(f"  - Problem: {res['problem_type']}, Version: {res['version']}, Metrics: {res['metrics']}")
             print("="*70)
-            return # Exit after querying
+            return  # Exit after querying
         except ValueError:
             print("Invalid query format. Please use 'metric:value', e.g., 'competitive_ratio:1.5'")
             return
+
+    context = OrchestrationContext(
+        project=args.project,
+        objective=args.objective
+    )
+
+    # Initialize or load the MetaLearner
+    if args.load_metaknowledge:
+        try:
+            with open(args.load_metaknowledge, 'rb') as f:
+                meta_learner = pickle.load(f)
+            print(f"🧠 Meta-knowledge loaded from {args.load_metaknowledge}")
+        except FileNotFoundError:
+            print(f"⚠️  Warning: Meta-knowledge file not found at '{args.load_metaknowledge}'. Starting fresh.")
+            meta_learner = MetaLearner()
+        except (pickle.UnpicklingError, EOFError):
+            print(f"⚠️  Warning: Could not unpickle meta-knowledge from '{args.load_metaknowledge}'. File may be corrupted. Starting fresh.")
+            meta_learner = MetaLearner()
+    else:
+        meta_learner = MetaLearner()
+
+    crispo = Crispo(context, meta_learner)
+    final_scripts = crispo.orchestrate(
+        project_type=args.project_type,
+        domain=args.domain,
+        complexity=args.complexity,
+        enable_transfer_learning=args.enable_transfer_learning,
+        enable_nas=args.enable_nas,
+        enable_federated_optimization=args.enable_federated_optimization,
+        trust_parameter=args.trust_parameter
+    )
 
     # Save the MetaLearner's state if requested
     if args.save_metaknowledge:
