@@ -97,6 +97,16 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(metrics['runtime_ok'], 1.0)
         self.assertEqual(metrics['overall_quality'], 1.0)
 
+    def test_verify_script_timeout(self):
+        """Check that the verifier correctly handles a script that times out."""
+        # This script will run indefinitely, so it should be terminated by the timeout.
+        script = "while True: pass"
+        metrics = self.verifier.verify_script(script)
+        # A timeout is a form of runtime failure.
+        self.assertEqual(metrics['syntax_ok'], 1.0)
+        self.assertEqual(metrics['runtime_ok'], 0.0)
+        self.assertEqual(metrics['overall_quality'], 0.5)
+
     @mock.patch('crispo_core.save_solution')
     def test_laa_evaluation_saves_correct_problem_type(self, mock_save_solution):
         """Verify that LAA evaluation saves solutions with the correct problem type."""
