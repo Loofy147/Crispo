@@ -9,7 +9,7 @@ import random
 from typing import Dict, List, Any
 from datetime import datetime
 
-from crispo_core import (
+from .crispo_core import (
     OrchestrationContext,
     LayerParameters,
     GAOptimizer,
@@ -22,12 +22,12 @@ from crispo_core import (
     SkiRentalContext,
     OneMaxSearchContext
 )
-from solution_registry import query_registry
-from advanced_crispo import (
+from .solution_registry import query_registry
+from .advanced_crispo import (
     FederatedOptimizer
 )
-import transfer_learning_pipeline as tlp
-import nas_pipeline as nas
+from . import transfer_learning_pipeline as tlp
+from . import nas_pipeline as nas
 
 # ============================================================================
 # CRISPO ENGINE

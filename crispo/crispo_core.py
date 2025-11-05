@@ -14,7 +14,7 @@ from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 from datetime import datetime
-from solution_registry import save_solution
+from .solution_registry import save_solution
 
 # ============================================================================
 # CORE CONSTANTS
@@ -1314,7 +1314,7 @@ class Verifier:
         metrics = json.loads(result_alg.stdout)
 
         # Evaluate predictor quality
-        from predictor_evaluator import PredictorEvaluator
+        from .predictor_evaluator import PredictorEvaluator
         import importlib.util
         import pandas as pd
         import os
