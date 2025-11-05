@@ -376,6 +376,22 @@ class TestRLAgent(unittest.TestCase):
         # 5. Assert that the new agent's Q-table is identical to the original
         self.assertEqual(agent1.get_q_table(), agent2.get_q_table())
 
+    def test_epsilon_decay(self):
+        """Verify that epsilon decays correctly over episodes."""
+        agent = RLAgent(epsilon=1.0, epsilon_decay=0.9, min_epsilon=0.1)
+        initial_epsilon = agent.epsilon
+
+        agent.execute(self.initial_params, self.context, episodes=1)
+        first_decay_epsilon = agent.epsilon
+
+        agent.execute(self.initial_params, self.context, episodes=1)
+        second_decay_epsilon = agent.epsilon
+
+        self.assertLess(first_decay_epsilon, initial_epsilon)
+        self.assertLess(second_decay_epsilon, first_decay_epsilon)
+        self.assertAlmostEqual(first_decay_epsilon, 1.0 * 0.9)
+        self.assertAlmostEqual(second_decay_epsilon, 1.0 * 0.9 * 0.9)
+
 
 class TestMetaLearner(unittest.TestCase):
     """Tests for the MetaLearner component."""

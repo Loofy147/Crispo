@@ -315,19 +315,23 @@ class RLAgent:
     store state-action values.
     """
 
-    def __init__(self, learning_rate: float = 0.1, discount: float = 0.95, epsilon: float = 0.2):
+    def __init__(self, learning_rate: float = 0.1, discount: float = 0.95, epsilon: float = 1.0, epsilon_decay: float = 0.995, min_epsilon: float = 0.01):
         """Initializes the RLAgent.
 
         Args:
             learning_rate (float): The rate at which the agent learns from new
                 information (alpha in the Bellman equation).
             discount (float): The discount factor for future rewards (gamma).
-            epsilon (float): The exploration rate for the epsilon-greedy
-                policy. A value of 0.2 means a 20% chance of exploring.
+            epsilon (float): The starting exploration rate.
+            epsilon_decay (float): The rate at which epsilon decays after each
+                episode.
+            min_epsilon (float): The minimum value epsilon can decay to.
         """
         self.learning_rate = learning_rate
         self.discount = discount
         self.epsilon = epsilon
+        self.epsilon_decay = epsilon_decay
+        self.min_epsilon = min_epsilon
         self.q_table: Dict[str, Dict[str, float]] = {}
 
     def load_q_table(self, q_table: Dict[str, Dict[str, float]]):
@@ -370,11 +374,14 @@ class RLAgent:
                 next_state = self._encode_state(params, context)
                 self._update_q_value(state, action, reward, next_state)
 
-            print(f"  [RL] Episode {episode + 1}: Reward={episode_reward:.3f}, Temp={params.temperature:.2f}")
+            print(f"  [RL] Episode {episode + 1}: Reward={episode_reward:.3f}, Epsilon={self.epsilon:.3f}")
 
             if episode_reward > best_reward:
                 best_reward = episode_reward
                 best_params = params.clone()
+
+            # Decay epsilon after each episode
+            self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
 
         return best_params
 
