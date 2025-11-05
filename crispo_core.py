@@ -339,6 +339,14 @@ class RLAgent:
         self.epsilon = epsilon
         self.q_table: Dict[str, Dict[str, float]] = {}
 
+    def load_q_table(self, q_table: Dict[str, Dict[str, float]]):
+        """Loads a pre-trained Q-table into the agent."""
+        self.q_table = q_table
+
+    def get_q_table(self) -> Dict[str, Dict[str, float]]:
+        """Returns the agent's current Q-table."""
+        return self.q_table
+
     def execute(self, initial_params: LayerParameters, context: Dict, episodes: int = 5) -> LayerParameters:
         """Runs the RL fine-tuning process.
 
@@ -972,6 +980,7 @@ class MetaLearner:
         self.task_history: List[TaskMetadata] = []
         self.strategy_performance: Dict[str, Dict[str, List[float]]] = defaultdict(_create_default_dict_list)
         self.available_strategies = ["high_quality", "high_speed", "balanced"]
+        self.rl_q_table: Dict[str, Dict[str, float]] = {}
 
     def record_task(self, task: TaskMetadata):
         """Records the outcome of a completed task to refine its strategy.

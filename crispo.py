@@ -292,6 +292,11 @@ def main():
         meta_learner = MetaLearner()
 
     crispo = Crispo(context, meta_learner)
+
+    # Load the RLAgent's Q-table from the MetaLearner
+    if hasattr(meta_learner, 'rl_q_table'):
+        crispo.rl_agent.load_q_table(meta_learner.rl_q_table)
+
     final_scripts = crispo.orchestrate(
         project_type=args.project_type,
         domain=args.domain,
@@ -304,6 +309,8 @@ def main():
 
     # Save the MetaLearner's state if requested
     if args.save_metaknowledge:
+        # First, update the meta_learner with the latest Q-table from the RLAgent
+        meta_learner.rl_q_table = crispo.rl_agent.get_q_table()
         with open(args.save_metaknowledge, 'wb') as f:
             pickle.dump(meta_learner, f)
         print(f"🧠 Meta-knowledge saved to {args.save_metaknowledge}")

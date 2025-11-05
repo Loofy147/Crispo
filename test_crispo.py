@@ -286,6 +286,30 @@ class TestRLAgent(unittest.TestCase):
         self.assertIsInstance(result, LayerParameters)
         self.assertNotEqual(result.temperature, self.initial_params.temperature)
 
+    def test_rl_agent_persistence(self):
+        """Verify that the RLAgent's Q-table can be saved and loaded."""
+        import pickle
+
+        # 1. Create an agent and populate its Q-table
+        agent1 = RLAgent()
+        agent1.q_table = {"state1": {"action1": 1.0}}
+
+        # 2. Store the Q-table in a MetaLearner instance
+        meta_learner_to_save = MetaLearner()
+        meta_learner_to_save.rl_q_table = agent1.get_q_table()
+
+        # 3. Simulate saving and loading the MetaLearner
+        saved_meta_learner = pickle.dumps(meta_learner_to_save)
+        loaded_meta_learner = pickle.loads(saved_meta_learner)
+
+        # 4. Create a new agent and load the Q-table
+        agent2 = RLAgent()
+        agent2.load_q_table(loaded_meta_learner.rl_q_table)
+
+        # 5. Assert that the new agent's Q-table is identical to the original
+        self.assertEqual(agent1.get_q_table(), agent2.get_q_table())
+
+
 class TestMetaLearner(unittest.TestCase):
     """Tests for the MetaLearner component."""
 
