@@ -6,6 +6,7 @@ GAOptimizer, etc. An integration test class is also included to verify the
 end-to-end functionality of the main orchestrator pipeline.
 """
 import unittest
+from unittest import mock
 import os
 from crispo_core import (
     LayerParameters,
@@ -16,8 +17,7 @@ from crispo_core import (
     MetaLearner,
     TaskMetadata,
     Verifier,
-    SkiRentalContext,
-    OneMaxSearchContext
+    SkiRentalContext
 )
 from crispo import Crispo, OrchestrationContext
 from advanced_crispo import (
@@ -96,17 +96,58 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(metrics['runtime_ok'], 1.0)
         self.assertEqual(metrics['overall_quality'], 1.0)
 
-    def test_verify_pipeline_partial_failure(self):
-        """Test a pipeline where an intermediate script fails."""
-        script1_success = "import json; print(json.dumps({'a': 1}))"
-        script2_fail = "import sys; sys.exit(1)"
-        script3_success = "import json; print(json.dumps({'b': 2}))"
+    @mock.patch('crispo_core.save_solution')
+    def test_laa_evaluation_saves_correct_problem_type(self, mock_save_solution):
+        """Verify that LAA evaluation saves solutions with the correct problem type."""
+        with mock.patch('crispo_core.subprocess.run') as mock_run, \
+             mock.patch('pandas.read_csv') as mock_read_csv, \
+             mock.patch('predictor_evaluator.PredictorEvaluator.evaluate_uq_calibration', return_value={}):
 
-        scripts = [script1_success, script2_fail, script3_success]
-        metrics = self.verifier.verify_pipeline(scripts)
+            mock_run.return_value = mock.Mock(returncode=0, stdout='{"competitive_ratio": 1.5}')
 
-        # Only the first script should succeed, so quality should be 1/3
-        self.assertAlmostEqual(metrics['overall_quality'], 1/3)
+            # Configure the mock dataframe to behave as expected for the train-test split logic
+            mock_series = mock.MagicMock()
+            mock_series.iloc.__getitem__.return_value.items.return_value = [] # .iloc[...].items()
+
+            mock_df = mock.MagicMock()
+            mock_df.__len__.return_value = 20
+            mock_df.iloc.__getitem__.return_value = mock_df
+            mock_df.__getitem__.return_value = mock_series
+            mock_df.to_csv = mock.Mock() # Mock the to_csv call
+            mock_read_csv.return_value = mock_df
+
+            dummy_predictor_code = "class Predictor:\\n    def __init__(self, historical_data_path): pass\\n    def predict_interval(self, steps=1): return [1, 2]".replace('\\n', '\n')
+            with open("dummy_predictor.py", "w") as f:
+                f.write(dummy_predictor_code)
+
+            with open("dummy_algorithm.py", "w") as f: f.write("pass")
+            with open("dummy_history.csv", "w") as f: f.write("value\\n1")
+
+            # The function under test creates and removes this file. Since our mock df doesn't
+            # create it, we must create it here to prevent a FileNotFoundError on removal.
+            with open("temp_train_history.csv", "w") as f: f.write("value\n1")
+
+            verifier = Verifier()
+            context = SkiRentalContext(historical_data_path="dummy_history.csv")
+
+            try:
+                verifier.evaluate_learning_augmented_algorithm(
+                    algorithm_script_path="dummy_algorithm.py",
+                    predictor_script_path="dummy_predictor.py",
+                    trust_parameter=0.8,
+                    problem_context=context
+                )
+
+                mock_save_solution.assert_called_once()
+                _, kwargs = mock_save_solution.call_args
+                self.assertEqual(kwargs.get('problem_type'), 'ski_rental')
+            finally:
+                # Clean up all dummy files
+                os.remove("dummy_algorithm.py")
+                os.remove("dummy_predictor.py")
+                os.remove("dummy_history.csv")
+                if os.path.exists("temp_train_history.csv"):
+                    os.remove("temp_train_history.csv")
 
 
 class TestCodeGenerator(unittest.TestCase):

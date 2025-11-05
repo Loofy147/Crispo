@@ -1335,7 +1335,7 @@ class Verifier:
 
 
         # Save the verified solution to the registry
-        problem_type = "ski_rental" if "ski" in algorithm_script_path else "one_max"
+        problem_type = "ski_rental" if isinstance(problem_context, SkiRentalContext) else "one_max"
         save_solution(
             problem_type=problem_type,
             performance_metrics=metrics
