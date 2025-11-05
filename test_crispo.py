@@ -218,6 +218,11 @@ class TestCodeGenerator(unittest.TestCase):
         self.assertIn("class Layer2System", script) # High-complexity template
         self.assertNotIn("import requests", script)
 
+    def test_generate_one_max_laa_template(self):
+        """Verify that the one-max search LAA template is generated correctly."""
+        script = self.cg.generate(self.params, 0, "one-max search")
+        self.assertIn("def one_max_algorithm", script)
+
 
 class TestAttentionRouter(unittest.TestCase):
     """Tests for the AttentionRouter component."""
@@ -562,6 +567,26 @@ class TestSolutionRegistry(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]['problem_type'], "query_problem")
         self.assertAlmostEqual(results[0]['metrics']['competitive_ratio'], 1.1)
+
+    def test_load_latest_solution_no_problem(self):
+        """Test loading a solution for a problem that doesn't exist."""
+        from solution_registry import load_latest_solution
+        loaded = load_latest_solution("non_existent_problem")
+        self.assertEqual(loaded, {})
+
+    def test_load_latest_solution_no_versions(self):
+        """Test loading a solution for a problem with no saved versions."""
+        from solution_registry import load_latest_solution
+        os.makedirs(os.path.join("solution_registry", "empty_problem"))
+        loaded = load_latest_solution("empty_problem")
+        self.assertEqual(loaded, {})
+
+    def test_query_registry_no_registry(self):
+        """Test querying when the registry directory doesn't exist."""
+        from solution_registry import query_registry
+        # setUp ensures the directory is clean, so we just call the function
+        results = query_registry("competitive_ratio", 1.5)
+        self.assertEqual(results, [])
 
     def test_one_max_laa_pipeline(self):
         """Test the end-to-end pipeline for the One-Max Search LAA."""
