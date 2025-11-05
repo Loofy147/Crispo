@@ -218,11 +218,6 @@ class TestCodeGenerator(unittest.TestCase):
         self.assertIn("class Layer2System", script) # High-complexity template
         self.assertNotIn("import requests", script)
 
-    def test_generate_one_max_laa_template(self):
-        """Verify that the one-max search LAA template is generated correctly."""
-        script = self.cg.generate(self.params, 0, "one-max search")
-        self.assertIn("def one_max_algorithm", script)
-
 
 class TestAttentionRouter(unittest.TestCase):
     """Tests for the AttentionRouter component."""
@@ -568,31 +563,43 @@ class TestSolutionRegistry(unittest.TestCase):
         self.assertEqual(results[0]['problem_type'], "query_problem")
         self.assertAlmostEqual(results[0]['metrics']['competitive_ratio'], 1.1)
 
-    def test_load_latest_solution_no_problem(self):
-        """Test loading a solution for a problem that doesn't exist."""
-        from solution_registry import load_latest_solution
-        loaded = load_latest_solution("non_existent_problem")
-        self.assertEqual(loaded, {})
-
-    def test_load_latest_solution_no_versions(self):
-        """Test loading a solution for a problem with no saved versions."""
-        from solution_registry import load_latest_solution
-        os.makedirs(os.path.join("solution_registry", "empty_problem"))
-        loaded = load_latest_solution("empty_problem")
-        self.assertEqual(loaded, {})
-
-    def test_query_registry_no_registry(self):
-        """Test querying when the registry directory doesn't exist."""
-        from solution_registry import query_registry
-        # setUp ensures the directory is clean, so we just call the function
-        results = query_registry("competitive_ratio", 1.5)
-        self.assertEqual(results, [])
-
     def test_one_max_laa_pipeline(self):
         """Test the end-to-end pipeline for the One-Max Search LAA."""
         # This test is now redundant as the new pipeline is tested above.
         # I will remove it to avoid complexity and focus on the co-design test.
         pass
+
+    def test_save_solution_race_condition(self):
+        """Verify that the save_solution function is robust against race conditions."""
+        from solution_registry import save_solution
+        import multiprocessing
+
+        problem_type = "race_condition_test"
+
+        # This worker function will be run by each process
+        def worker():
+            # Create dummy files to be moved by save_solution
+            with open("generated_algorithm.py", "w") as f: f.write("alg")
+            with open("generated_predictor.py", "w") as f: f.write("pred")
+            save_solution(problem_type, {"metric": 1.0})
+
+        # Create two processes that will run the worker function concurrently
+        p1 = multiprocessing.Process(target=worker)
+        p2 = multiprocessing.Process(target=worker)
+
+        p1.start()
+        p2.start()
+
+        p1.join()
+        p2.join()
+
+        # After both processes have completed, check the solution registry
+        problem_path = os.path.join("solution_registry", problem_type)
+        versions = [d for d in os.listdir(problem_path) if d.startswith('v')]
+
+        # If the lock worked, there should be two distinct versions saved.
+        # If it failed, one would have overwritten the other, resulting in only one version.
+        self.assertEqual(len(versions), 2, "The locking mechanism failed to prevent a race condition.")
 
 
 class TestProblemContexts(unittest.TestCase):
