@@ -1,3 +1,13 @@
+---
+license: agpl-3.0
+tags:
+- learning-augmented-algorithms
+- automated-algorithm-design
+- crispo
+- code-generation
+- ai-code-generation
+---
+
 # Crispo: Autonomous Co-Design of ML Predictors and Learning-Augmented Algorithms
 
 Crispo is a production-ready, research-grade system for the automated co-design of Learning-Augmented Algorithms (LAA). It transforms high-level objectives into complete, two-part "Solution Packages" containing a machine learning predictor and a specialized algorithm that consumes its predictions.
@@ -115,7 +125,7 @@ python3 crispo.py --objective "My second run, building on the first" --load-meta
 
 `crispo` is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. This means you are free to use, modify, and distribute this software for any open-source project that is also licensed under the AGPLv3.
 
-For use in a closed-source, proprietary, or commercial application, a separate commercial license is required. Please contact us at `your.email@example.com` to inquire about obtaining a commercial license.
+For use in a closed-source, proprietary, or commercial application, a separate commercial license is required. Please contact us at `crispo.contact@gmail.com` to inquire about obtaining a commercial license.
 
 ## Testing
 

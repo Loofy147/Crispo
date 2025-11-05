@@ -6,12 +6,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="crispo",
     version="1.0.1",
-    author="Your Name",
-    author_email="your.email@example.com",
+    author="LOOFYYLO",
+    author_email="crispo.contact@gmail.com",
     description="Automated co-design of ML predictors and learning-augmented algorithms",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/crispo",
+    url="https://github.com/LOOFYYLO/crispo",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",

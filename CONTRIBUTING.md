@@ -4,11 +4,11 @@ First off, thank you for considering contributing to Crispo! It's people like yo
 
 ## Where do I go from here?
 
-If you've noticed a bug or have a feature request, [make one](https://github.com/yourusername/crispo/issues/new)! It's generally best if you get confirmation of your bug or approval for your feature request this way before starting to code.
+If you've noticed a bug or have a feature request, [make one](https://github.com/LOOFYYLO/crispo/issues/new)! It's generally best if you get confirmation of your bug or approval for your feature request this way before starting to code.
 
 ### Fork & create a branch
 
-If this is something you think you can fix, then [fork Crispo](https://github.com/yourusername/crispo/fork) and create a branch with a descriptive name.
+If this is something you think you can fix, then [fork Crispo](https://github.com/LOOFYYLO/crispo/fork) and create a branch with a descriptive name.
 
 A good branch name would be (where issue #33 is the ticket you're working on):
 
@@ -33,7 +33,7 @@ At this point, you're ready to make your changes! Feel free to ask for help; eve
 At this point, you should switch back to your master branch and make sure it's up to date with Crispo's master branch:
 
 ```bash
-git remote add upstream git@github.com:yourusername/crispo.git
+git remote add upstream git@github.com:LOOFYYLO/crispo.git
 git checkout master
 git pull upstream master
 ```
@@ -46,7 +46,7 @@ git rebase master
 git push --force-with-lease origin 33-add-new-optimizer
 ```
 
-Finally, go to GitHub and [make a Pull Request](https://github.com/yourusername/crispo/compare)
+Finally, go to GitHub and [make a Pull Request](https://github.com/LOOFYYLO/crispo/compare)
 
 ### Keeping your Pull Request updated
 
