@@ -17,6 +17,18 @@ from datetime import datetime
 from solution_registry import save_solution
 
 # ============================================================================
+# CORE CONSTANTS
+# ============================================================================
+
+# Timeout values for various operations, in seconds.
+API_REQUEST_TIMEOUT = 5
+SINGLE_SCRIPT_VERIFICATION_TIMEOUT = 10
+PIPELINE_VERIFICATION_TIMEOUT = 15
+PREDICTOR_EXECUTION_TIMEOUT = 20
+ALGORITHM_EXECUTION_TIMEOUT = 10
+
+
+# ============================================================================
 # CORE DATA STRUCTURES
 # ============================================================================
 
@@ -888,7 +900,7 @@ import json
 def process_layer_{layer_id}(input_context):
     api_endpoint = input_context.get('api_endpoint', 'https://jsonplaceholder.typicode.com/todos/1')
     try:
-        response = requests.get(api_endpoint, timeout=5)
+        response = requests.get(api_endpoint, timeout=API_REQUEST_TIMEOUT)
         response.raise_for_status()
         output_context = {{'data': response.json()}}
     except requests.exceptions.RequestException as e:
@@ -1178,7 +1190,7 @@ class Verifier:
                 ['python3', temp_filename],
                 capture_output=True,
                 text=True,
-                timeout=10 # Add a timeout to prevent long-running scripts
+                timeout=SINGLE_SCRIPT_VERIFICATION_TIMEOUT
             )
 
             # A non-zero return code indicates a runtime error
@@ -1233,7 +1245,7 @@ class Verifier:
                     ['python3', temp_filename],
                     capture_output=True,
                     text=True,
-                    timeout=15
+                    timeout=PIPELINE_VERIFICATION_TIMEOUT
                 )
 
                 if result.returncode == 0:
@@ -1274,7 +1286,7 @@ class Verifier:
         """
         # Stage 1: Run the predictor to get a live prediction
         cmd_pred = ['python3', predictor_script_path, problem_context.historical_data_path]
-        result_pred = subprocess.run(cmd_pred, capture_output=True, text=True, timeout=20)
+        result_pred = subprocess.run(cmd_pred, capture_output=True, text=True, timeout=PREDICTOR_EXECUTION_TIMEOUT)
         if result_pred.returncode != 0:
             print(f"  [Verifier] Predictor script failed: {result_pred.stderr}")
             return {'competitive_ratio': float('inf')}
@@ -1287,7 +1299,7 @@ class Verifier:
         cmd_alg = problem_context.get_evaluation_command(
             algorithm_script_path, live_prediction, trust_parameter, scenario
         )
-        result_alg = subprocess.run(cmd_alg, capture_output=True, text=True, timeout=10)
+        result_alg = subprocess.run(cmd_alg, capture_output=True, text=True, timeout=ALGORITHM_EXECUTION_TIMEOUT)
         if result_alg.returncode != 0:
             print(f"  [Verifier] Algorithm script failed: {result_alg.stderr}")
             return {'competitive_ratio': float('inf')}

@@ -282,8 +282,11 @@ def main():
             with open(args.load_metaknowledge, 'rb') as f:
                 meta_learner = pickle.load(f)
             print(f"🧠 Meta-knowledge loaded from {args.load_metaknowledge}")
-        except (FileNotFoundError, pickle.UnpicklingError):
-            print("⚠️  Could not load meta-knowledge, starting fresh.")
+        except FileNotFoundError:
+            print(f"⚠️  Warning: Meta-knowledge file not found at '{args.load_metaknowledge}'. Starting fresh.")
+            meta_learner = MetaLearner()
+        except (pickle.UnpicklingError, EOFError):
+            print(f"⚠️  Warning: Could not unpickle meta-knowledge from '{args.load_metaknowledge}'. File may be corrupted. Starting fresh.")
             meta_learner = MetaLearner()
     else:
         meta_learner = MetaLearner()

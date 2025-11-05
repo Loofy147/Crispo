@@ -683,6 +683,29 @@ class TestCLI(unittest.TestCase):
             # 2. Assert that the query function WAS called with the correct parameters
             mock_query_registry.assert_called_once_with("competitive_ratio", 1.5)
 
+    @mock.patch('argparse.ArgumentParser')
+    @mock.patch('builtins.open', new_callable=mock.mock_open)
+    @mock.patch('pickle.load')
+    def test_cli_load_metaknowledge_file_not_found(self, mock_pickle_load, mock_open, mock_parser):
+        """Verify that a warning is printed when the metaknowledge file is not found."""
+        from crispo import main
+        import io
+
+        # Mock the parsed arguments
+        mock_args = unittest.mock.MagicMock()
+        mock_args.load_metaknowledge = "non_existent_file.pkl"
+        mock_args.save_metaknowledge = None # Ensure the save block is not triggered
+        mock_args.query_registry = None  # Ensure orchestration is not bypassed
+        mock_parser.return_value.parse_args.return_value = mock_args
+
+        # Make the mock 'open' raise a FileNotFoundError
+        mock_open.side_effect = FileNotFoundError
+
+        with unittest.mock.patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
+            with unittest.mock.patch('crispo.Crispo'): # Mock Crispo to prevent orchestration
+                main()
+                output = mock_stdout.getvalue()
+                self.assertIn("Warning: Meta-knowledge file not found", output)
 
 if __name__ == '__main__':
     unittest.main()
