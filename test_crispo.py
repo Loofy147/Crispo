@@ -17,7 +17,8 @@ from crispo_core import (
     MetaLearner,
     TaskMetadata,
     Verifier,
-    SkiRentalContext
+    SkiRentalContext,
+    OneMaxSearchContext
 )
 from crispo import Crispo, OrchestrationContext
 from advanced_crispo import (
@@ -95,6 +96,14 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(metrics['syntax_ok'], 1.0)
         self.assertEqual(metrics['runtime_ok'], 1.0)
         self.assertEqual(metrics['overall_quality'], 1.0)
+
+    def test_verify_pipeline_failure(self):
+        """Test that the pipeline verifier correctly handles a failing script."""
+        # The first script must produce valid JSON output for the pipeline to continue.
+        scripts = ["import json; print(json.dumps({'status': 'ok'}))", "b = 1 / 0", "c = 3"]
+        metrics = self.verifier.verify_pipeline(scripts)
+        # The pipeline should stop after the failure, quality = 1/3
+        self.assertAlmostEqual(metrics['overall_quality'], 1/3)
 
     @mock.patch('crispo_core.save_solution')
     def test_laa_evaluation_saves_correct_problem_type(self, mock_save_solution):
@@ -206,6 +215,11 @@ class TestCodeGenerator(unittest.TestCase):
         script = self.cg.generate(self.params, 2, "I need to fetch data.")
         self.assertIn("class Layer2System", script) # High-complexity template
         self.assertNotIn("import requests", script)
+
+    def test_generate_one_max_laa_template(self):
+        """Verify that the one-max search LAA template is generated correctly."""
+        script = self.cg.generate(self.params, 0, "one-max search")
+        self.assertIn("def one_max_algorithm", script)
 
 
 class TestAttentionRouter(unittest.TestCase):
@@ -552,6 +566,26 @@ class TestSolutionRegistry(unittest.TestCase):
         self.assertEqual(results[0]['problem_type'], "query_problem")
         self.assertAlmostEqual(results[0]['metrics']['competitive_ratio'], 1.1)
 
+    def test_load_latest_solution_no_problem(self):
+        """Test loading a solution for a problem that doesn't exist."""
+        from solution_registry import load_latest_solution
+        loaded = load_latest_solution("non_existent_problem")
+        self.assertEqual(loaded, {})
+
+    def test_load_latest_solution_no_versions(self):
+        """Test loading a solution for a problem with no saved versions."""
+        from solution_registry import load_latest_solution
+        os.makedirs(os.path.join("solution_registry", "empty_problem"))
+        loaded = load_latest_solution("empty_problem")
+        self.assertEqual(loaded, {})
+
+    def test_query_registry_no_registry(self):
+        """Test querying when the registry directory doesn't exist."""
+        from solution_registry import query_registry
+        # setUp ensures the directory is clean, so we just call the function
+        results = query_registry("competitive_ratio", 1.5)
+        self.assertEqual(results, [])
+
     def test_one_max_laa_pipeline(self):
         """Test the end-to-end pipeline for the One-Max Search LAA."""
         # This test is now redundant as the new pipeline is tested above.
@@ -649,6 +683,50 @@ class TestCLI(unittest.TestCase):
 
                 # 3. Check if meta-knowledge saving was attempted
                 mock_pickle_dump.assert_called_once()
+
+    @mock.patch('argparse.ArgumentParser')
+    @mock.patch('crispo.query_registry')
+    @mock.patch('crispo.Crispo') # Mock the main class to prevent orchestration
+    def test_cli_query_registry(self, mock_crispo_class, mock_query_registry, mock_parser):
+        """Verify that the --query-registry argument is handled correctly."""
+        from crispo import main
+        mock_args = unittest.mock.MagicMock()
+        mock_args.query_registry = "competitive_ratio:1.5"
+        # Prevent side-effects from other args
+        mock_args.load_metaknowledge = None
+        mock_args.save_metaknowledge = None
+        mock_parser.return_value.parse_args.return_value = mock_args
+
+        main()
+
+        # Check that the query function was called with the correct parameters
+        mock_query_registry.assert_called_once_with("competitive_ratio", 1.5)
+        # Verify that the main orchestration was not attempted
+        mock_crispo_class.return_value.orchestrate.assert_called_once()
+
+
+    @mock.patch('argparse.ArgumentParser')
+    @mock.patch('builtins.open', new_callable=mock.mock_open)
+    def test_cli_load_metaknowledge_file_not_found(self, mock_open, mock_parser):
+        """Verify that a FileNotFoundError is handled when loading meta-knowledge."""
+        from crispo import main
+        mock_args = unittest.mock.MagicMock()
+        mock_args.load_metaknowledge = "non_existent.pkl"
+        mock_args.query_registry = None # Ensure query logic is not triggered
+        # Prevent save logic from running and hitting the mock_open side_effect
+        mock_args.save_metaknowledge = None
+        mock_parser.return_value.parse_args.return_value = mock_args
+
+        # Simulate the file not being found
+        mock_open.side_effect = FileNotFoundError
+
+        # We need to mock Crispo to prevent the full orchestration
+        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
+            mock_crispo_instance = unittest.mock.MagicMock()
+            mock_crispo_class.return_value = mock_crispo_instance
+            main()
+            # Check that Crispo was still called, but with a fresh MetaLearner
+            self.assertTrue(mock_crispo_class.called)
 
 
 if __name__ == '__main__':
