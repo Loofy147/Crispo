@@ -183,6 +183,31 @@ class TestCodeGenerator(unittest.TestCase):
         self.assertNotIn("class", script)
         self.assertIn("def process_layer_2", script)
 
+    def test_generate_intent_api_fetch(self):
+        """Verify that 'fetch' intent triggers the API template for layer 0."""
+        # High complexity, but the intent 'fetch' should override for layer 0
+        self.params.weights['complexity'] = 0.9
+        script = self.cg.generate(self.params, 0, "I need to fetch data from a REST API.")
+        self.assertIn("import requests", script)
+        self.assertIn("def process_layer_0", script)
+
+    def test_generate_intent_transform(self):
+        """Verify that 'transform' intent triggers the pandas template for layer 1."""
+        # Low complexity, but the intent 'transform' should override for layer 1
+        self.params.weights['complexity'] = 0.1
+        script = self.cg.generate(self.params, 1, "Please transform the dataset.")
+        self.assertIn("import pandas as pd", script)
+        self.assertIn("def process_layer_1", script)
+
+    def test_generate_intent_fallback(self):
+        """Verify fallback to complexity if intent is not relevant for the layer."""
+        # The 'fetch' intent is for layer 0, so layer 2 should use complexity.
+        self.params.weights['complexity'] = 0.9
+        script = self.cg.generate(self.params, 2, "I need to fetch data.")
+        self.assertIn("class Layer2System", script) # High-complexity template
+        self.assertNotIn("import requests", script)
+
+
 class TestAttentionRouter(unittest.TestCase):
     """Tests for the AttentionRouter component."""
 
@@ -532,6 +557,98 @@ class TestSolutionRegistry(unittest.TestCase):
         # This test is now redundant as the new pipeline is tested above.
         # I will remove it to avoid complexity and focus on the co-design test.
         pass
+
+
+class TestProblemContexts(unittest.TestCase):
+    """Tests for the problem context classes used in LAA evaluation."""
+
+    def test_ski_rental_context(self):
+        """Verify the SkiRentalContext's methods."""
+        context = SkiRentalContext(buy_cost=50)
+        scenario = 30  # Actual days
+
+        # Test command generation
+        cmd = context.get_evaluation_command("script.py", "[25, 35]", 0.8, scenario)
+        self.assertEqual(cmd, ['python3', 'script.py', '50', '[25, 35]', '0.8', '30'])
+
+        # Test prediction generation
+        self.assertEqual(context.get_perfect_prediction(scenario), [30, 30])
+        self.assertEqual(context.get_worst_prediction(scenario), [1, 2])
+        self.assertEqual(context.get_noisy_prediction(scenario, 0.1), [27, 33])
+
+    def test_one_max_context(self):
+        """Verify the OneMaxSearchContext's methods."""
+        context = OneMaxSearchContext()
+        scenario = [10, 80, 45, 92, 30] # Sequence of values
+
+        # Test command generation
+        cmd = context.get_evaluation_command("script.py", "[85, 95]", 0.9, scenario)
+        self.assertEqual(cmd, ['python3', 'script.py', str(scenario), '[85, 95]', '0.9'])
+
+        # Test prediction generation
+        self.assertEqual(context.get_perfect_prediction(scenario), [92, 92])
+        self.assertEqual(context.get_worst_prediction(scenario), [10, 10])
+        self.assertEqual(context.get_noisy_prediction(scenario, 0.1), [82, 101])
+
+
+from unittest import mock
+
+class TestCLI(unittest.TestCase):
+    """Tests for the command-line interface in crispo.py."""
+
+    @mock.patch('argparse.ArgumentParser')
+    def test_cli_argument_parsing(self, mock_parser):
+        """Verify that CLI arguments are correctly parsed and passed to Crispo."""
+        from crispo import main
+        import crispo as crispo_module
+
+        # Mock the parsed arguments
+        mock_args = unittest.mock.MagicMock()
+        mock_args.project = "CLITest"
+        mock_args.objective = "Test CLI"
+        mock_args.project_type = "cli_test"
+        mock_args.domain = "testing"
+        mock_args.complexity = 0.1
+        mock_args.load_metaknowledge = None
+        mock_args.save_metaknowledge = "test.pkl"
+        mock_args.enable_transfer_learning = True
+        mock_args.enable_nas = False
+        mock_args.enable_federated_optimization = True
+        mock_args.trust_parameter = 0.9
+        mock_args.query_registry = None
+        mock_parser.return_value.parse_args.return_value = mock_args
+
+        # Mock the Crispo class itself to intercept its creation and methods
+        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
+            # We need a mock instance to be returned when Crispo is instantiated
+            mock_crispo_instance = unittest.mock.MagicMock()
+            mock_crispo_class.return_value = mock_crispo_instance
+
+            # We also need to mock the pickle dump for saving metaknowledge
+            with unittest.mock.patch('pickle.dump') as mock_pickle_dump:
+                main()
+
+                # 1. Check if Crispo was instantiated correctly
+                mock_crispo_class.assert_called_once()
+                # We can check the context object passed to the constructor
+                args, _ = mock_crispo_class.call_args
+                context_arg = args[0]
+                self.assertEqual(context_arg.project, "CLITest")
+                self.assertEqual(context_arg.objective, "Test CLI")
+
+                # 2. Check if the orchestrate method was called with the correct args
+                mock_crispo_instance.orchestrate.assert_called_once_with(
+                    project_type="cli_test",
+                    domain="testing",
+                    complexity=0.1,
+                    enable_transfer_learning=True,
+                    enable_nas=False,
+                    enable_federated_optimization=True,
+                    trust_parameter=0.9
+                )
+
+                # 3. Check if meta-knowledge saving was attempted
+                mock_pickle_dump.assert_called_once()
 
 
 if __name__ == '__main__':
