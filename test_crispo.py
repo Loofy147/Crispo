@@ -67,6 +67,25 @@ class TestAdvancedFeatures(unittest.TestCase):
         # Check that weights have been modified
         self.assertNotEqual(optimized_params.weights, self.params.weights)
 
+    def test_federated_optimizer_aggregates_temperature(self):
+        """Verify that the federated optimizer correctly aggregates the temperature."""
+        fo = FederatedOptimizer(num_clients=2)
+
+        # Create two client models with different temperatures
+        model1 = self.params.clone()
+        model1.temperature = 0.5
+        model2 = self.params.clone()
+        model2.temperature = 1.5
+
+        client_models = [model1, model2]
+        client_data_sizes = [100, 100] # Equal weighting
+
+        # Directly call the internal aggregate method to test the logic
+        aggregated_model = fo._aggregate(client_models, client_data_sizes)
+
+        # The aggregated temperature should be the average
+        self.assertAlmostEqual(aggregated_model.temperature, 1.0)
+
 class TestVerifier(unittest.TestCase):
     """Tests for the Verifier component."""
     def setUp(self):
