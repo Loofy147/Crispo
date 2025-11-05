@@ -9,6 +9,7 @@ def generate_code(objective, complexity, trust_parameter, project_type, domain, 
     """
     try:
         # Create dummy history files if LAA is selected, as the system requires them.
+        # This is the critical fix: ensure the files exist in the runtime environment.
         if is_laa:
             if "ski rental" in objective.lower() and not os.path.exists("ski_rental_history.csv"):
                 with open("ski_rental_history.csv", "w") as f:
@@ -62,7 +63,6 @@ def generate_code(objective, complexity, trust_parameter, project_type, domain, 
         return f"An unexpected error occurred: {str(e)}", ""
 
 # Define the Gradio interface
-# Force rebuild
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🤖 Crispo: Autonomous Algorithm Co-Design")
     gr.Markdown(

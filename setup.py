@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="crispo",
-    version="1.0.2",
+    version="1.0.3",
     author="LOOFYYLO",
     author_email="crispo.contact@gmail.com",
     description="Automated co-design of ML predictors and learning-augmented algorithms",
