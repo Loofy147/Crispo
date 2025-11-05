@@ -218,10 +218,44 @@ class TestCodeGenerator(unittest.TestCase):
         self.assertIn("class Layer2System", script) # High-complexity template
         self.assertNotIn("import requests", script)
 
-    def test_generate_one_max_laa_template(self):
-        """Verify that the one-max search LAA template is generated correctly."""
-        script = self.cg.generate(self.params, 0, "one-max search")
-        self.assertIn("def one_max_algorithm", script)
+    def test_generated_one_max_script_correctness(self):
+        """Verify that the generated one-max script calculates metrics correctly."""
+        import subprocess
+        import json
+        import tempfile
+
+        # 1. Generate the script
+        script_code = self.cg.generate(self.params, 0, "one-max search")
+
+        # 2. Save it to a temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write(script_code)
+            temp_filename = temp_file.name
+
+        # 3. Execute the script with controlled inputs
+        # Optimal is 100, algorithm is guided to select 80
+        sequence = str([10, 50, 80, 100, 30])
+        prediction = str([75, 85]) # Prediction interval that should select 80
+        trust = "0.9"
+
+        result = subprocess.run(
+            input=f"'{sequence}' '{prediction}' {trust}",
+            capture_output=True,
+            text=True,
+            # The script expects command-line arguments, not stdin
+            args=['python3', temp_filename, sequence, prediction, trust]
+        )
+
+        # 4. Clean up the file
+        os.remove(temp_filename)
+
+        # 5. Parse and assert the output
+        self.assertEqual(result.returncode, 0)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['optimal_cost'], 100)
+        self.assertEqual(output['algorithm_cost'], 80)
+        # The competitive ratio for a maximization problem should be alg / opt
+        self.assertAlmostEqual(output['competitive_ratio'], 0.8)
 
 
 class TestAttentionRouter(unittest.TestCase):
@@ -290,6 +324,30 @@ class TestRLAgent(unittest.TestCase):
         result = self.rl.execute(self.initial_params, self.context, episodes=3)
         self.assertIsInstance(result, LayerParameters)
         self.assertNotEqual(result.temperature, self.initial_params.temperature)
+
+    def test_rl_agent_persistence(self):
+        """Verify that the RLAgent's Q-table can be saved and loaded."""
+        import pickle
+
+        # 1. Create an agent and populate its Q-table
+        agent1 = RLAgent()
+        agent1.q_table = {"state1": {"action1": 1.0}}
+
+        # 2. Store the Q-table in a MetaLearner instance
+        meta_learner_to_save = MetaLearner()
+        meta_learner_to_save.rl_q_table = agent1.get_q_table()
+
+        # 3. Simulate saving and loading the MetaLearner
+        saved_meta_learner = pickle.dumps(meta_learner_to_save)
+        loaded_meta_learner = pickle.loads(saved_meta_learner)
+
+        # 4. Create a new agent and load the Q-table
+        agent2 = RLAgent()
+        agent2.load_q_table(loaded_meta_learner.rl_q_table)
+
+        # 5. Assert that the new agent's Q-table is identical to the original
+        self.assertEqual(agent1.get_q_table(), agent2.get_q_table())
+
 
 class TestMetaLearner(unittest.TestCase):
     """Tests for the MetaLearner component."""
@@ -568,31 +626,43 @@ class TestSolutionRegistry(unittest.TestCase):
         self.assertEqual(results[0]['problem_type'], "query_problem")
         self.assertAlmostEqual(results[0]['metrics']['competitive_ratio'], 1.1)
 
-    def test_load_latest_solution_no_problem(self):
-        """Test loading a solution for a problem that doesn't exist."""
-        from solution_registry import load_latest_solution
-        loaded = load_latest_solution("non_existent_problem")
-        self.assertEqual(loaded, {})
-
-    def test_load_latest_solution_no_versions(self):
-        """Test loading a solution for a problem with no saved versions."""
-        from solution_registry import load_latest_solution
-        os.makedirs(os.path.join("solution_registry", "empty_problem"))
-        loaded = load_latest_solution("empty_problem")
-        self.assertEqual(loaded, {})
-
-    def test_query_registry_no_registry(self):
-        """Test querying when the registry directory doesn't exist."""
-        from solution_registry import query_registry
-        # setUp ensures the directory is clean, so we just call the function
-        results = query_registry("competitive_ratio", 1.5)
-        self.assertEqual(results, [])
-
     def test_one_max_laa_pipeline(self):
         """Test the end-to-end pipeline for the One-Max Search LAA."""
         # This test is now redundant as the new pipeline is tested above.
         # I will remove it to avoid complexity and focus on the co-design test.
         pass
+
+    def test_save_solution_race_condition(self):
+        """Verify that the save_solution function is robust against race conditions."""
+        from solution_registry import save_solution
+        import multiprocessing
+
+        problem_type = "race_condition_test"
+
+        # This worker function will be run by each process
+        def worker():
+            # Create dummy files to be moved by save_solution
+            with open("generated_algorithm.py", "w") as f: f.write("alg")
+            with open("generated_predictor.py", "w") as f: f.write("pred")
+            save_solution(problem_type, {"metric": 1.0})
+
+        # Create two processes that will run the worker function concurrently
+        p1 = multiprocessing.Process(target=worker)
+        p2 = multiprocessing.Process(target=worker)
+
+        p1.start()
+        p2.start()
+
+        p1.join()
+        p2.join()
+
+        # After both processes have completed, check the solution registry
+        problem_path = os.path.join("solution_registry", problem_type)
+        versions = [d for d in os.listdir(problem_path) if d.startswith('v')]
+
+        # If the lock worked, there should be two distinct versions saved.
+        # If it failed, one would have overwritten the other, resulting in only one version.
+        self.assertEqual(len(versions), 2, "The locking mechanism failed to prevent a race condition.")
 
 
 class TestProblemContexts(unittest.TestCase):

@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 
 def save_solution(problem_type: str, performance_metrics: Dict[str, Any]):
     """
-    Saves a generated solution package to the registry.
+    Saves a generated solution package to the registry atomically using a lock file.
 
     Args:
         problem_type (str): The type of problem (e.g., 'ski_rental').
@@ -20,22 +20,39 @@ def save_solution(problem_type: str, performance_metrics: Dict[str, Any]):
     problem_path = os.path.join(registry_path, problem_type)
     os.makedirs(problem_path, exist_ok=True)
 
-    # Find the next version number
-    versions = [d for d in os.listdir(problem_path) if d.startswith('v')]
-    next_version = f"v{len(versions) + 1}"
-    version_path = os.path.join(problem_path, next_version)
-    os.makedirs(version_path)
+    lock_file_path = os.path.join(problem_path, ".lock")
+    lock_fd = None
 
-    # Save the metadata
-    metadata_path = os.path.join(version_path, "metadata.json")
-    with open(metadata_path, 'w') as f:
-        json.dump(performance_metrics, f, indent=4)
+    try:
+        # Acquire a lock using an atomic file creation operation
+        lock_fd = os.open(lock_file_path, os.O_CREAT | os.O_EXCL)
 
-    # Move the generated scripts into the versioned folder
-    os.rename("generated_algorithm.py", os.path.join(version_path, "algorithm.py"))
-    os.rename("generated_predictor.py", os.path.join(version_path, "predictor.py"))
+        # CRITICAL SECTION: Find the next version number
+        versions = [d for d in os.listdir(problem_path) if d.startswith('v')]
+        next_version = f"v{len(versions) + 1}"
+        version_path = os.path.join(problem_path, next_version)
+        os.makedirs(version_path)
 
-    print(f"  [Registry] Saved {problem_type} solution {next_version} to registry.")
+        # Save the metadata
+        metadata_path = os.path.join(version_path, "metadata.json")
+        with open(metadata_path, 'w') as f:
+            json.dump(performance_metrics, f, indent=4)
+
+        # Move the generated scripts into the versioned folder
+        os.rename("generated_algorithm.py", os.path.join(version_path, "algorithm.py"))
+        os.rename("generated_predictor.py", os.path.join(version_path, "predictor.py"))
+
+        print(f"  [Registry] Saved {problem_type} solution {next_version} to registry.")
+
+    except FileExistsError:
+        print("  [Registry] Could not acquire lock, another process may be saving a solution.")
+        # Optionally, wait and retry, but for now, we'll just exit
+        return
+    finally:
+        # Release the lock
+        if lock_fd is not None:
+            os.close(lock_fd)
+            os.remove(lock_file_path)
 
 def load_latest_solution(problem_type: str) -> Dict[str, str]:
     """
