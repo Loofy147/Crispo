@@ -488,7 +488,7 @@ class TestOrchestratorIntegration(unittest.TestCase):
             objective="Test Objective"
         )
         meta_learner = MetaLearner()
-        crispo = Crispo(context, meta_learner)
+        crispo = Crispo(context, meta_learner, problem_context=None)
 
         final_scripts = crispo.orchestrate(
             project_type="data_pipeline",
@@ -513,7 +513,7 @@ class TestOrchestratorIntegration(unittest.TestCase):
             objective="Test Objective"
         )
         meta_learner = MetaLearner()
-        crispo = Crispo(context, meta_learner)
+        crispo = Crispo(context, meta_learner, problem_context=None)
 
         final_scripts = crispo.orchestrate(
             project_type="data_pipeline",
@@ -547,7 +547,7 @@ class TestOrchestratorIntegration(unittest.TestCase):
 
         # 2. Run the orchestrator with transfer learning enabled
         context = OrchestrationContext(project="TLTest", objective="Test TL")
-        crispo = Crispo(context, MetaLearner())
+        crispo = Crispo(context, MetaLearner(), problem_context=None)
 
         crispo.orchestrate(
             project_type="data_pipeline",
@@ -575,7 +575,7 @@ class TestOrchestratorIntegration(unittest.TestCase):
     def test_production_nas_pipeline(self):
         """Test that the new NAS pipeline runs without errors."""
         context = OrchestrationContext(project="NASTest", objective="Test NAS")
-        crispo = Crispo(context, MetaLearner())
+        crispo = Crispo(context, MetaLearner(), problem_context=None)
 
         # We just want to ensure this runs to completion without crashing
         final_scripts = crispo.orchestrate(
@@ -609,7 +609,8 @@ class TestLearningAugmentedAlgorithms(unittest.TestCase):
             objective="Generate a learning-augmented algorithm for the ski rental problem"
         )
         meta_learner = MetaLearner(epsilon=0.0)
-        crispo = Crispo(context, meta_learner)
+        problem_context = SkiRentalContext()
+        crispo = Crispo(context, meta_learner, problem_context=problem_context)
 
         final_scripts = crispo.orchestrate(
             project_type="laa_ski_rental",

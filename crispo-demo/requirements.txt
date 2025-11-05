@@ -1,0 +1,6 @@
+gradio
+crispo
+statsmodels
+pandas
+scikit-learn
+numpy
