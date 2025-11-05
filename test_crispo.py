@@ -8,7 +8,7 @@ end-to-end functionality of the main orchestrator pipeline.
 import unittest
 from unittest import mock
 import os
-from crispo_core import (
+from crispo.crispo_core import (
     LayerParameters,
     GAOptimizer,
     RLAgent,
@@ -20,11 +20,11 @@ from crispo_core import (
     SkiRentalContext,
     OneMaxSearchContext
 )
-from crispo import Crispo, OrchestrationContext
-from advanced_crispo import (
+from crispo.crispo import Crispo, OrchestrationContext
+from crispo.advanced_crispo import (
     FederatedOptimizer
 )
-from predictor_evaluator import PredictorEvaluator
+from crispo.predictor_evaluator import PredictorEvaluator
 
 class TestPredictorEvaluator(unittest.TestCase):
     """Tests for the PredictorEvaluator component."""
@@ -126,12 +126,12 @@ class TestVerifier(unittest.TestCase):
         self.assertEqual(metrics['runtime_ok'], 0.0)
         self.assertEqual(metrics['overall_quality'], 0.5)
 
-    @mock.patch('crispo_core.save_solution')
+    @mock.patch('crispo.crispo_core.save_solution')
     def test_laa_evaluation_saves_correct_problem_type(self, mock_save_solution):
         """Verify that LAA evaluation saves solutions with the correct problem type."""
-        with mock.patch('crispo_core.subprocess.run') as mock_run, \
+        with mock.patch('crispo.crispo_core.subprocess.run') as mock_run, \
              mock.patch('pandas.read_csv') as mock_read_csv, \
-             mock.patch('predictor_evaluator.PredictorEvaluator.evaluate_uq_calibration', return_value={}):
+             mock.patch('crispo.predictor_evaluator.PredictorEvaluator.evaluate_uq_calibration', return_value={}):
 
             mock_run.return_value = mock.Mock(returncode=0, stdout='{"competitive_ratio": 1.5}')
 
@@ -657,7 +657,7 @@ class TestSolutionRegistry(unittest.TestCase):
 
     def test_save_and_load_solution(self):
         """Test that a solution can be saved and then loaded."""
-        from solution_registry import save_solution, load_latest_solution
+        from crispo.solution_registry import save_solution, load_latest_solution
 
         # Create dummy generated files for the registry to move
         with open("generated_algorithm.py", "w") as f: f.write("alg")
@@ -673,7 +673,7 @@ class TestSolutionRegistry(unittest.TestCase):
 
     def test_query_registry(self):
         """Test the querying functionality of the registry."""
-        from solution_registry import save_solution, query_registry
+        from crispo.solution_registry import save_solution, query_registry
 
         # Save two solutions for the same problem
         with open("generated_algorithm.py", "w") as f: f.write("alg1")
@@ -697,7 +697,7 @@ class TestSolutionRegistry(unittest.TestCase):
 
     def test_save_solution_race_condition(self):
         """Verify that the save_solution function is robust against race conditions."""
-        from solution_registry import save_solution
+        from crispo.solution_registry import save_solution
         import multiprocessing
 
         problem_type = "race_condition_test"
@@ -768,8 +768,8 @@ class TestCLI(unittest.TestCase):
     @mock.patch('argparse.ArgumentParser')
     def test_cli_argument_parsing(self, mock_parser):
         """Verify that CLI arguments are correctly parsed and passed to Crispo."""
-        from crispo import main
-        import crispo as crispo_module
+        from crispo.crispo import main
+        import crispo.crispo as crispo_module
 
         # Mock the parsed arguments
         mock_args = unittest.mock.MagicMock()
@@ -788,7 +788,7 @@ class TestCLI(unittest.TestCase):
         mock_parser.return_value.parse_args.return_value = mock_args
 
         # Mock the Crispo class itself to intercept its creation and methods
-        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
+        with unittest.mock.patch('crispo.crispo.Crispo') as mock_crispo_class:
             # We need a mock instance to be returned when Crispo is instantiated
             mock_crispo_instance = unittest.mock.MagicMock()
             mock_crispo_class.return_value = mock_crispo_instance
@@ -820,10 +820,10 @@ class TestCLI(unittest.TestCase):
                 mock_pickle_dump.assert_called_once()
 
     @mock.patch('argparse.ArgumentParser')
-    @mock.patch('crispo.query_registry')
+    @mock.patch('crispo.crispo.query_registry')
     def test_cli_query_registry_bypasses_orchestration(self, mock_query_registry, mock_parser):
         """Verify that --query-registry bypasses the main orchestration logic."""
-        from crispo import main
+        from crispo.crispo import main
 
         # Mock the parsed arguments to simulate the --query-registry flag
         mock_args = unittest.mock.MagicMock()
@@ -831,7 +831,7 @@ class TestCLI(unittest.TestCase):
         mock_parser.return_value.parse_args.return_value = mock_args
 
         # Mock the Crispo class to ensure it's not called
-        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
+        with unittest.mock.patch('crispo.crispo.Crispo') as mock_crispo_class:
             main()
 
             # 1. Assert that the orchestration engine was NOT created or run
@@ -846,7 +846,7 @@ class TestCLI(unittest.TestCase):
     @mock.patch('pickle.load')
     def test_cli_load_metaknowledge_file_not_found(self, mock_pickle_load, mock_open, mock_parser):
         """Verify that a warning is printed when the metaknowledge file is not found."""
-        from crispo import main
+        from crispo.crispo import main
         import io
 
         # Mock the parsed arguments
@@ -860,7 +860,7 @@ class TestCLI(unittest.TestCase):
         mock_open.side_effect = FileNotFoundError
 
         with unittest.mock.patch('sys.stdout', new_callable=io.StringIO) as mock_stdout:
-            with unittest.mock.patch('crispo.Crispo'): # Mock Crispo to prevent orchestration
+            with unittest.mock.patch('crispo.crispo.Crispo'): # Mock Crispo to prevent orchestration
                 main()
                 output = mock_stdout.getvalue()
                 self.assertIn("Warning: Meta-knowledge file not found", output)
