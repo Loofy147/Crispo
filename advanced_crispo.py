@@ -76,13 +76,15 @@ class FederatedOptimizer:
         # Initialize the aggregated model from the first client model structure
         aggregated_model = client_models[0].clone()
 
-        # Zero out the weights and biases of the aggregated model
+        # Zero out the weights, biases, and temperature of the aggregated model
         if hasattr(aggregated_model, 'weights'):
             for key in aggregated_model.weights:
                 aggregated_model.weights[key] = 0.0
         if hasattr(aggregated_model, 'biases'):
-             for key in aggregated_model.biases:
+            for key in aggregated_model.biases:
                 aggregated_model.biases[key] = 0.0
+        if hasattr(aggregated_model, 'temperature'):
+            aggregated_model.temperature = 0.0
 
         # Perform weighted averaging
         for model, data_size in zip(client_models, client_data_sizes):
@@ -93,5 +95,7 @@ class FederatedOptimizer:
             if hasattr(aggregated_model, 'biases'):
                 for key in aggregated_model.biases:
                     aggregated_model.biases[key] += model.biases.get(key, 0.0) * weight
+            if hasattr(aggregated_model, 'temperature'):
+                aggregated_model.temperature += model.temperature * weight
 
         return aggregated_model

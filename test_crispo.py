@@ -67,6 +67,25 @@ class TestAdvancedFeatures(unittest.TestCase):
         # Check that weights have been modified
         self.assertNotEqual(optimized_params.weights, self.params.weights)
 
+    def test_federated_optimizer_aggregates_temperature(self):
+        """Verify that the federated optimizer correctly aggregates the temperature."""
+        fo = FederatedOptimizer(num_clients=2)
+
+        # Create two client models with different temperatures
+        model1 = self.params.clone()
+        model1.temperature = 0.5
+        model2 = self.params.clone()
+        model2.temperature = 1.5
+
+        client_models = [model1, model2]
+        client_data_sizes = [100, 100] # Equal weighting
+
+        # Directly call the internal aggregate method to test the logic
+        aggregated_model = fo._aggregate(client_models, client_data_sizes)
+
+        # The aggregated temperature should be the average
+        self.assertAlmostEqual(aggregated_model.temperature, 1.0)
+
 class TestVerifier(unittest.TestCase):
     """Tests for the Verifier component."""
     def setUp(self):
@@ -301,6 +320,34 @@ class TestGAOptimizer(unittest.TestCase):
         self.assertIsInstance(result, LayerParameters)
         self.assertIn('complexity', result.weights)
 
+    def test_ga_elitism(self):
+        """Verify that the GA's elitism correctly preserves the fittest individual."""
+        # 1. Create a population where one individual is clearly the fittest.
+        population_size = 10
+        population = self.ga._initialize_population(self.template_params, population_size)
+
+        # Create a "super" individual with a very high fitness score.
+        # This individual has perfect alignment and temperature.
+        super_individual = self.template_params.clone()
+        super_individual.weights['complexity'] = self.context['desired_complexity']
+        super_individual.temperature = 1.0
+
+        # To make its fitness stand out, slightly worsen the others.
+        for p in population:
+             p.temperature = 1.5
+        population[0] = super_individual
+
+        # 2. Mock initialization to force the GA to use our crafted population.
+        with mock.patch.object(self.ga, '_initialize_population', return_value=population):
+            # 3. Run the GA for a single generation.
+            best_found = self.ga.execute(self.template_params, self.context, generations=1)
+
+            # 4. Assert that the returned individual is our "super" individual,
+            # proving it survived the selection process.
+            self.assertAlmostEqual(best_found.weights['complexity'], super_individual.weights['complexity'])
+            self.assertAlmostEqual(best_found.temperature, super_individual.temperature)
+
+
 class TestRLAgent(unittest.TestCase):
     """Tests for the RLAgent component."""
 
@@ -347,6 +394,22 @@ class TestRLAgent(unittest.TestCase):
 
         # 5. Assert that the new agent's Q-table is identical to the original
         self.assertEqual(agent1.get_q_table(), agent2.get_q_table())
+
+    def test_epsilon_decay(self):
+        """Verify that epsilon decays correctly over episodes."""
+        agent = RLAgent(epsilon=1.0, epsilon_decay=0.9, min_epsilon=0.1)
+        initial_epsilon = agent.epsilon
+
+        agent.execute(self.initial_params, self.context, episodes=1)
+        first_decay_epsilon = agent.epsilon
+
+        agent.execute(self.initial_params, self.context, episodes=1)
+        second_decay_epsilon = agent.epsilon
+
+        self.assertLess(first_decay_epsilon, initial_epsilon)
+        self.assertLess(second_decay_epsilon, first_decay_epsilon)
+        self.assertAlmostEqual(first_decay_epsilon, 1.0 * 0.9)
+        self.assertAlmostEqual(second_decay_epsilon, 1.0 * 0.9 * 0.9)
 
 
 class TestMetaLearner(unittest.TestCase):
