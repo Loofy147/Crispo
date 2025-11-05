@@ -176,22 +176,13 @@ class GAOptimizer:
 
             offspring = [self._mutate(child) for child in offspring]
 
-            # Elitism: keep the best individual
-            best_individual = population[fitness_scores.index(max(fitness_scores))]
+            # New elitism strategy: Combine parents and offspring, then select the best
+            combined_population = population + offspring
+            combined_fitness = [self._evaluate_fitness(ind, context) for ind in combined_population]
 
-            # Create a new population with the best individual and the offspring
-            new_population = [best_individual]
-            new_population.extend(offspring)
-
-            # Fill the rest of the population with individuals from the old population
-            # sorted by fitness
-            sorted_population = [x for _, x in sorted(zip(fitness_scores, population), key=lambda pair: pair[0], reverse=True)]
-
-            fill_count = population_size - len(new_population)
-            if fill_count > 0:
-                new_population.extend(sorted_population[:fill_count])
-
-            population = new_population[:population_size]
+            # Sort the combined population by fitness and select the top individuals
+            sorted_combined = [x for _, x in sorted(zip(combined_fitness, combined_population), key=lambda pair: pair[0], reverse=True)]
+            population = sorted_combined[:population_size]
 
 
         final_fitness = [self._evaluate_fitness(ind, context) for ind in population]

@@ -301,6 +301,34 @@ class TestGAOptimizer(unittest.TestCase):
         self.assertIsInstance(result, LayerParameters)
         self.assertIn('complexity', result.weights)
 
+    def test_ga_elitism(self):
+        """Verify that the GA's elitism correctly preserves the fittest individual."""
+        # 1. Create a population where one individual is clearly the fittest.
+        population_size = 10
+        population = self.ga._initialize_population(self.template_params, population_size)
+
+        # Create a "super" individual with a very high fitness score.
+        # This individual has perfect alignment and temperature.
+        super_individual = self.template_params.clone()
+        super_individual.weights['complexity'] = self.context['desired_complexity']
+        super_individual.temperature = 1.0
+
+        # To make its fitness stand out, slightly worsen the others.
+        for p in population:
+             p.temperature = 1.5
+        population[0] = super_individual
+
+        # 2. Mock initialization to force the GA to use our crafted population.
+        with mock.patch.object(self.ga, '_initialize_population', return_value=population):
+            # 3. Run the GA for a single generation.
+            best_found = self.ga.execute(self.template_params, self.context, generations=1)
+
+            # 4. Assert that the returned individual is our "super" individual,
+            # proving it survived the selection process.
+            self.assertAlmostEqual(best_found.weights['complexity'], super_individual.weights['complexity'])
+            self.assertAlmostEqual(best_found.temperature, super_individual.temperature)
+
+
 class TestRLAgent(unittest.TestCase):
     """Tests for the RLAgent component."""
 
