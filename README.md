@@ -111,6 +111,12 @@ python3 crispo.py --objective "My first run" --save-metaknowledge knowledge.pkl
 python3 crispo.py --objective "My second run, building on the first" --load-metaknowledge knowledge.pkl
 ```
 
+## Licensing
+
+`crispo` is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. This means you are free to use, modify, and distribute this software for any open-source project that is also licensed under the AGPLv3.
+
+For use in a closed-source, proprietary, or commercial application, a separate commercial license is required. Please contact us at `your.email@example.com` to inquire about obtaining a commercial license.
+
 ## Testing
 
 The project uses the built-in `unittest` framework. To run the full test suite:
