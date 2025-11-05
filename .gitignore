@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 *.pkl
+dist/
+*.egg-info/
