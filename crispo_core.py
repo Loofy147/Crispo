@@ -818,7 +818,7 @@ def main():
     output = {{
         "algorithm_cost": alg_value, # In One-Max, "cost" is the value selected
         "optimal_cost": opt_value,
-        "competitive_ratio": opt_value / alg_value if alg_value > 0 else float('inf')
+        "competitive_ratio": alg_value / opt_value if opt_value > 0 else 1.0
     }}
     print(json.dumps(output))
 

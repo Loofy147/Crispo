@@ -218,6 +218,45 @@ class TestCodeGenerator(unittest.TestCase):
         self.assertIn("class Layer2System", script) # High-complexity template
         self.assertNotIn("import requests", script)
 
+    def test_generated_one_max_script_correctness(self):
+        """Verify that the generated one-max script calculates metrics correctly."""
+        import subprocess
+        import json
+        import tempfile
+
+        # 1. Generate the script
+        script_code = self.cg.generate(self.params, 0, "one-max search")
+
+        # 2. Save it to a temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            temp_file.write(script_code)
+            temp_filename = temp_file.name
+
+        # 3. Execute the script with controlled inputs
+        # Optimal is 100, algorithm is guided to select 80
+        sequence = str([10, 50, 80, 100, 30])
+        prediction = str([75, 85]) # Prediction interval that should select 80
+        trust = "0.9"
+
+        result = subprocess.run(
+            input=f"'{sequence}' '{prediction}' {trust}",
+            capture_output=True,
+            text=True,
+            # The script expects command-line arguments, not stdin
+            args=['python3', temp_filename, sequence, prediction, trust]
+        )
+
+        # 4. Clean up the file
+        os.remove(temp_filename)
+
+        # 5. Parse and assert the output
+        self.assertEqual(result.returncode, 0)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['optimal_cost'], 100)
+        self.assertEqual(output['algorithm_cost'], 80)
+        # The competitive ratio for a maximization problem should be alg / opt
+        self.assertAlmostEqual(output['competitive_ratio'], 0.8)
+
 
 class TestAttentionRouter(unittest.TestCase):
     """Tests for the AttentionRouter component."""
