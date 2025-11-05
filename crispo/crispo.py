@@ -42,7 +42,7 @@ class Crispo:
     flow of control through the different phases of orchestration.
     """
 
-    def __init__(self, context: OrchestrationContext, meta_learner: MetaLearner):
+    def __init__(self, context: OrchestrationContext, meta_learner: MetaLearner, problem_context=None):
         """Initializes the Crispo engine.
 
         Args:
@@ -50,6 +50,7 @@ class Crispo:
                 orchestration run, containing the project name and objective.
             meta_learner (MetaLearner): The MetaLearner instance, which may be
                 pre-loaded with historical knowledge.
+            problem_context: An optional problem-specific context for LAA tasks.
         """
         self.context = context
         self.ga_optimizer = GAOptimizer()
@@ -58,6 +59,7 @@ class Crispo:
         self.code_generator = CodeGenerator()
         self.meta_learner = meta_learner
         self.verifier = Verifier()
+        self.problem_context = problem_context
 
         # Initialize advanced components
         self.federated_optimizer = FederatedOptimizer(num_clients=10)
@@ -70,7 +72,7 @@ class Crispo:
         enable_transfer_learning: bool,
         enable_nas: bool,
         enable_federated_optimization: bool,
-        trust_parameter: float
+        trust_parameter: float,
     ) -> List[str]:
         """Executes the full, multi-phase orchestration pipeline.
 
@@ -182,20 +184,13 @@ class Crispo:
         print("\n🔬 PHASE 4: Verification and Feedback")
 
         # If it's a learning-augmented algorithm, use the new evaluation method
-        objective = self.context.objective.lower()
-        problem_context = None
-        if "ski rental" in objective:
-            problem_context = SkiRentalContext()
-        elif "one-max search" in objective:
-            problem_context = OneMaxSearchContext()
-
-        if problem_context:
+        if self.problem_context:
             # The new verifier takes the paths to the generated scripts
             laa_metrics = self.verifier.evaluate_learning_augmented_algorithm(
                 algorithm_script_path="generated_algorithm.py",
                 predictor_script_path="generated_predictor.py",
                 trust_parameter=trust_parameter,
-                problem_context=problem_context
+                problem_context=self.problem_context
             )
             print(f"  - Co-Designed Solution Competitive Ratio: {laa_metrics.get('competitive_ratio', 0.0):.2f}")
             success_metrics = laa_metrics
