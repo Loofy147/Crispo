@@ -249,6 +249,28 @@ def main():
 
     args = parser.parse_args()
 
+    # Handle registry query if requested and exit immediately.
+    if args.query_registry:
+        try:
+            metric, threshold_str = args.query_registry.split(':')
+            threshold = float(threshold_str)
+            results = query_registry(metric, threshold)
+
+            print("\n" + "="*70)
+            print("SOLUTION REGISTRY QUERY RESULTS")
+            print(f"Solutions with {metric} <= {threshold}:")
+            print("="*70)
+            if not results:
+                print("No solutions found matching the criterion.")
+            else:
+                for res in results:
+                    print(f"  - Problem: {res['problem_type']}, Version: {res['version']}, Metrics: {res['metrics']}")
+            print("="*70)
+            return  # Exit after querying
+        except ValueError:
+            print("Invalid query format. Please use 'metric:value', e.g., 'competitive_ratio:1.5'")
+            return
+
     context = OrchestrationContext(
         project=args.project,
         objective=args.objective
@@ -276,28 +298,6 @@ def main():
         enable_federated_optimization=args.enable_federated_optimization,
         trust_parameter=args.trust_parameter
     )
-
-    # Handle registry query if requested
-    if args.query_registry:
-        try:
-            metric, threshold_str = args.query_registry.split(':')
-            threshold = float(threshold_str)
-            results = query_registry(metric, threshold)
-
-            print("\n" + "="*70)
-            print("SOLUTION REGISTRY QUERY RESULTS")
-            print(f"Solutions with {metric} <= {threshold}:")
-            print("="*70)
-            if not results:
-                print("No solutions found matching the criterion.")
-            else:
-                for res in results:
-                    print(f"  - Problem: {res['problem_type']}, Version: {res['version']}, Metrics: {res['metrics']}")
-            print("="*70)
-            return # Exit after querying
-        except ValueError:
-            print("Invalid query format. Please use 'metric:value', e.g., 'competitive_ratio:1.5'")
-            return
 
     # Save the MetaLearner's state if requested
     if args.save_metaknowledge:

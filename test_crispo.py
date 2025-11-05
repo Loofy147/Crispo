@@ -17,7 +17,8 @@ from crispo_core import (
     MetaLearner,
     TaskMetadata,
     Verifier,
-    SkiRentalContext
+    SkiRentalContext,
+    OneMaxSearchContext
 )
 from crispo import Crispo, OrchestrationContext
 from advanced_crispo import (
@@ -649,6 +650,28 @@ class TestCLI(unittest.TestCase):
 
                 # 3. Check if meta-knowledge saving was attempted
                 mock_pickle_dump.assert_called_once()
+
+    @mock.patch('argparse.ArgumentParser')
+    @mock.patch('crispo.query_registry')
+    def test_cli_query_registry_bypasses_orchestration(self, mock_query_registry, mock_parser):
+        """Verify that --query-registry bypasses the main orchestration logic."""
+        from crispo import main
+
+        # Mock the parsed arguments to simulate the --query-registry flag
+        mock_args = unittest.mock.MagicMock()
+        mock_args.query_registry = "competitive_ratio:1.5"
+        mock_parser.return_value.parse_args.return_value = mock_args
+
+        # Mock the Crispo class to ensure it's not called
+        with unittest.mock.patch('crispo.Crispo') as mock_crispo_class:
+            main()
+
+            # 1. Assert that the orchestration engine was NOT created or run
+            mock_crispo_class.assert_not_called()
+            mock_crispo_class.return_value.orchestrate.assert_not_called()
+
+            # 2. Assert that the query function WAS called with the correct parameters
+            mock_query_registry.assert_called_once_with("competitive_ratio", 1.5)
 
 
 if __name__ == '__main__':
