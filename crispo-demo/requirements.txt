@@ -1,5 +1,5 @@
 gradio
-crispo
+crispo==1.0.3
 statsmodels
 pandas
 scikit-learn
