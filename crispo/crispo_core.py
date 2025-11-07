@@ -349,24 +349,30 @@ if __name__ == "__main__":
         Returns:
             A string containing the generated Python script.
         """
-        num_cols = int(10 * complexity)
         return f'''# Layer {layer_id}: High-Complexity Data Processing
 import numpy as np
 import json
+import pandas as pd
 
-class Layer{layer_id}System:
-    def process(self, input_context):
-        data = np.array(input_context.get('data', []))
-        # Apply a non-linear transformation
-        transformed_data = np.tanh(data)
-        output_context = {{'data': transformed_data.tolist()}}
-        return output_context
+def process_layer_{layer_id}(input_context):
+    records = input_context.get('data', [])
+    if not records:
+        print(json.dumps({{'data': []}}))
+        return
+
+    df = pd.DataFrame(records)
+    # Perform a numerical operation on a column if it exists
+    if 'new_col' in df.columns:
+        df['analyzed_col'] = np.log1p(df['new_col'])
+
+    output_context = {{'data': df.to_dict('records')}}
+    return output_context
 
 if __name__ == '__main__':
-    system = Layer{layer_id}System()
-    # Example usage with mock data
-    mock_input_context = {{'data': np.random.rand(1, {num_cols}).tolist()}}
-    result = system.process(mock_input_context)
+    # This block is for standalone execution and will be driven by the test
+    # The 'input_context' will be injected by the test runner if it exists.
+    context = locals().get('input_context', {{}})
+    result = process_layer_{layer_id}(context)
     print(json.dumps(result))
 '''
 
@@ -384,20 +390,32 @@ if __name__ == '__main__':
         return f'''# Layer {layer_id}: Data Transformation
 import pandas as pd
 import json
+import numpy as np
 
 def process_layer_{layer_id}(input_context):
-    data = input_context.get('data', {{}})
+    data = input_context.get('data', [])
+
+    # API layer returns a single dict, ensure it's wrapped in a list for pandas
+    if isinstance(data, dict):
+        data = [data]
+
     df = pd.DataFrame(data)
+
     # Perform a simple data transformation
     if not df.empty:
-        df['new_col'] = df.iloc[:, 0] * {1 + complexity:.2f}
+        # Find the first numeric column to apply the transformation
+        numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+        if numeric_cols:
+            df['new_col'] = df[numeric_cols[0]] * {1 + complexity:.2f}
+
     output_context = {{'data': df.to_dict('records')}}
     return output_context
 
 if __name__ == '__main__':
-    # Example usage with mock data
-    mock_input_context = {{'data': {{'col1': [1, 2, 3], 'col2': [4, 5, 6]}}}}
-    result = process_layer_{layer_id}(mock_input_context)
+    # This block is for standalone execution and will be driven by the test
+    # The 'input_context' will be injected by the test runner if it exists.
+    context = locals().get('input_context', {{}})
+    result = process_layer_{layer_id}(context)
     print(json.dumps(result))
 '''
 
@@ -417,7 +435,7 @@ import json
 def process_layer_{layer_id}(input_context):
     api_endpoint = input_context.get('api_endpoint', 'https://jsonplaceholder.typicode.com/todos/1')
     try:
-        response = requests.get(api_endpoint, timeout=API_REQUEST_TIMEOUT)
+        response = requests.get(api_endpoint, timeout=5)
         response.raise_for_status()
         output_context = {{'data': response.json()}}
     except requests.exceptions.RequestException as e:
@@ -426,9 +444,10 @@ def process_layer_{layer_id}(input_context):
     return output_context
 
 if __name__ == '__main__':
-    # Example usage with a mock API endpoint
-    mock_input_context = {{'api_endpoint': 'https://jsonplaceholder.typicode.com/todos/1'}}
-    result = process_layer_{layer_id}(mock_input_context)
+    # This block is for standalone execution and will be driven by the test
+    # The 'input_context' will be injected by the test runner if it exists.
+    context = locals().get('input_context', {{}})
+    result = process_layer_{layer_id}(context)
     print(json.dumps(result))
 '''
 
@@ -451,9 +470,10 @@ def process_layer_{layer_id}(input_context):
     return output_context
 
 if __name__ == '__main__':
-    # Example usage with mock data
-    mock_input_context = {{'data': 10}}
-    result = process_layer_{layer_id}(mock_input_context)
+    # This block is for standalone execution and will be driven by the test
+    # The 'input_context' will be injected by the test runner if it exists.
+    context = locals().get('input_context', {{}})
+    result = process_layer_{layer_id}(context)
     print(json.dumps(result))
 '''
 
