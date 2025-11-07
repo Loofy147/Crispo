@@ -10,6 +10,9 @@ import math
 import re
 import subprocess
 import tempfile
+import os
+import resource
+import platform
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
@@ -334,6 +337,20 @@ class RLAgent:
         self.min_epsilon = min_epsilon
         self.q_table: Dict[str, Dict[str, float]] = {}
 
+    def prune_q_table(self, max_size: int = 1000):
+        """Prunes the Q-table to prevent unbounded growth."""
+        if len(self.q_table) <= max_size:
+            return
+
+        # Calculate the sum of Q-values for each state
+        state_scores = {state: sum(actions.values()) for state, actions in self.q_table.items()}
+
+        # Get the states with the highest scores
+        top_states = sorted(state_scores, key=state_scores.get, reverse=True)[:max_size]
+
+        # Create a new Q-table with only the top states
+        self.q_table = {state: self.q_table[state] for state in top_states}
+
     def load_q_table(self, q_table: Dict[str, Dict[str, float]]):
         """Loads a pre-trained Q-table into the agent."""
         self.q_table = q_table
@@ -382,6 +399,9 @@ class RLAgent:
 
             # Decay epsilon after each episode
             self.epsilon = max(self.min_epsilon, self.epsilon * self.epsilon_decay)
+
+            # Prune the Q-table to prevent memory leaks
+            self.prune_q_table()
 
         return best_params
 
@@ -1184,20 +1204,36 @@ class Verifier:
         try:
             compile(script_code, '<string>', 'exec')
             metrics['syntax_ok'] = 1.0
-        except SyntaxError:
+        except (SyntaxError, TypeError):
             return metrics  # No point in trying to run if syntax is wrong
+
+        def set_limits():
+            """Set resource limits for the subprocess."""
+            # Set CPU time limit to 2 seconds
+            resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+            # Set memory limit to 100MB
+            resource.setrlimit(resource.RLIMIT_AS, (100 * 1024 * 1024, 100 * 1024 * 1024))
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
             temp_file.write(script_code)
             temp_filename = temp_file.name
 
+        # Prepare subprocess arguments
+        run_args = {
+            "capture_output": True,
+            "text": True,
+            "timeout": SINGLE_SCRIPT_VERIFICATION_TIMEOUT
+        }
+
+        # Add resource limits only on non-Windows platforms
+        if platform.system() != "Windows":
+            run_args["preexec_fn"] = set_limits
+
         try:
             # Execute the script as a subprocess
             result = subprocess.run(
                 ['python3', temp_filename],
-                capture_output=True,
-                text=True,
-                timeout=SINGLE_SCRIPT_VERIFICATION_TIMEOUT
+                **run_args
             )
 
             # A non-zero return code indicates a runtime error
