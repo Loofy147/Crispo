@@ -3,3 +3,11 @@ __pycache__/
 *.pkl
 dist/
 *.egg-info/
+build/
+
+# Temporary files from testing and demos
+gradio.log
+live_test_output.txt
+ski_rental_history.csv
+one_max_history.csv
+page_source.html
