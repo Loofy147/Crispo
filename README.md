@@ -1,84 +1,41 @@
 ---
-license: agpl-3.0
-tags:
-- learning-augmented-algorithms
-- automated-algorithm-design
-- crispo
-- code-generation
-- ai-code-generation
----
+# Crispo: A Template-Based Code Generation System
 
-# Crispo: Autonomous Co-Design of ML Predictors and Learning-Augmented Algorithms
-
-Crispo is a production-ready, research-grade system for the automated co-design of Learning-Augmented Algorithms (LAA). It transforms high-level objectives into complete, two-part "Solution Packages" containing a machine learning predictor and a specialized algorithm that consumes its predictions.
+Crispo is a system that generates Python scripts from high-level objectives. It uses a simple, template-based approach to create code for a variety of tasks, including data processing and the implementation of Learning-Augmented Algorithms (LAA).
 
 ## 🎯 System Overview
 
-The core innovation of Crispo is its ability to bridge the gap between machine learning and classical algorithm design. For a given online problem (e.g., ski rental), it generates:
+Crispo is designed to be a straightforward and transparent code generation tool. It takes a user's objective, such as "fetch data from an API," and matches it to a pre-defined code template. This template is then used to generate a Python script that accomplishes the desired task.
 
-1.  **A Predictor Script:** An ML model (e.g., ARIMA) that learns from historical data to predict future values and quantifies its own uncertainty.
-2.  **An Algorithm Script:** A Learning-Augmented Algorithm that takes the ML prediction as input and intelligently balances it against a robust worst-case strategy using a trust parameter (λ).
+For more complex tasks, such as the co-design of Learning-Augmented Algorithms, Crispo can generate a "Solution Package" consisting of two scripts:
 
-The entire system is designed to be autonomous, optimizing its own components and learning from past performance to improve future solutions.
+1.  **A Predictor Script:** An ML model that learns from historical data to predict future values.
+2.  **An Algorithm Script:** A Learning-Augmented Algorithm that uses the ML prediction to make informed decisions.
 
 ## 🏗️ Core Architecture
 
-Crispo is built on a three-tier optimization stack, ensuring a clear separation of concerns:
+Crispo's architecture is simple and direct. It consists of two main components:
 
-1.  **Genetic Algorithm (Strategic):** The `GAOptimizer` evolves high-level parameters for code generation, searching for the best overall strategy. It now features **adaptive population sizing** for improved efficiency.
-2.  **Reinforcement Learning (Tactical):** The `RLAgent` fine-tunes the parameters for a specific layer, using a Q-table to learn optimal, context-aware adjustments. The Q-table is now **pruned** to prevent unbounded memory growth.
-3.  **Attention Mechanism (Coordination):** The `AttentionRouter` allows different layers of the generated pipeline to share information, ensuring a cohesive and well-coordinated final output.
+1.  **`CodeGenerator`:** This is the heart of the system. It contains a set of pre-defined code templates and a simple logic for selecting the most appropriate template based on keywords in the user's objective.
+2.  **`Verifier`:** This component is responsible for ensuring the quality and security of the generated code. It checks for syntax and runtime errors and executes the code in a sandboxed environment with strict resource limits to prevent security vulnerabilities.
 
-This stack feeds into an intent-driven `CodeGenerator` that selects and parameterizes code templates based on the user's objective.
+## ✨ Key Features
 
-## ✨ Key Features & Innovations
+### 1. Template-Based Code Generation
 
-### 1. Learning-Augmented Algorithm (LAA) Co-Design
+Crispo's primary feature is its simple and transparent template-based approach to code generation. This makes it easy to understand how the system works and to extend it with new templates.
 
-Crispo's primary feature is its end-to-end framework for generating and evaluating LAAs. The system automatically co-designs a predictor and an algorithm that work in tandem.
+### 2. Learning-Augmented Algorithm (LAA) Co-Design
 
-### 2. Two-Stage "Live" Evaluation
+Crispo can generate a complete "Solution Package" for Learning-Augmented Algorithms, including a predictor and an algorithm that work together.
 
-To ensure solutions are robust, the `Verifier` performs a rigorous, two-stage evaluation that simulates a real-world deployment:
+### 3. Security-Focused Verification
 
-*   **Stage 1: Prediction:** The generated predictor is run on historical data to produce a "live" prediction interval.
-*   **Stage 2: Execution:** The generated algorithm is run with the live prediction, and its performance (e.g., `competitive_ratio`) is measured.
+The `Verifier` ensures that all generated code is executed in a secure, sandboxed environment with strict CPU and memory limits. This mitigates the risk of security vulnerabilities such as arbitrary code execution and resource exhaustion.
 
-This methodology is novel and provides a much more realistic assessment than mock evaluations.
-
-### 3. Solution Registry
+### 4. Solution Registry
 
 Verified solutions are automatically versioned and saved to the `solution_registry/` directory. This creates a persistent, queryable knowledge base of high-quality solutions.
-
-**Example Query:**
-```bash
-python3 crispo.py --query-registry "competitive_ratio:1.2"
-```
-
-### 4. Meta-Learning with UCB1
-
-The `MetaLearner` allows Crispo to learn from its own performance. It has been upgraded from a simple epsilon-greedy strategy to an **Upper Confidence Bound (UCB1)** algorithm, which provides a more principled and efficient balance between exploring new strategies and exploiting known good ones.
-
-## ⚙️ Component Analysis & Recent Improvements
-
--   **`GAOptimizer`:** Now uses **adaptive population sizing** to scale its search space based on problem complexity, improving performance. It also evaluates fitness in parallel using a `ProcessPoolExecutor`.
--   **`RLAgent`:** The Q-table is now **pruned** after each training episode to prevent memory exhaustion in long-running sessions.
--   **`Verifier`:** Now includes a `PredictorEvaluator` that calculates **Uncertainty Quantification (UQ) metrics** (`coverage_rate` and `interval_sharpness`) for the generated predictor, providing a more complete picture of the solution's quality.
--   **Security:** Subprocess execution is now sandboxed with **resource limits** to prevent runaway processes, and file writes are validated to prevent **directory traversal attacks**.
-
-## 🚀 Advanced Features
-
-### Bayesian Neural Architecture Search (NAS)
-
-The NAS pipeline has been upgraded from a random search to a **Bayesian Optimization** strategy, using Gaussian Processes to intelligently search for optimal neural network architectures. This results in a ~10x speedup in finding near-optimal architectures.
-
-### Federated Optimizer
-
-The placeholder `FederatedOptimizer` has been replaced with a functional **Federated Averaging (FedAvg)** implementation, enabling true federated learning across multiple clients.
-
-### Transfer Learning
-
-A production-ready, three-step transfer learning pipeline (`load_model`, `apply_model`, `log_to_registry`) is available to transfer knowledge from previously trained models.
 
 ## Usage
 
@@ -100,32 +57,9 @@ python3 crispo.py --project "SkiRentalLAA" --objective "Generate a learning-augm
 
 *Note: This requires a `ski_rental_history.csv` file in the root directory.*
 
-### Enabling Advanced Features
-
-```bash
-python3 crispo.py --objective "Optimize a deep learning model" \
-                  --enable-nas \
-                  --enable-transfer-learning \
-                  --enable-federated-optimization
-```
-
-### Saving and Loading Meta-Knowledge
-
-You can persist the `MetaLearner`'s state across runs:
-
-```bash
-# Save the learned state
-python3 crispo.py --objective "My first run" --save-metaknowledge knowledge.pkl
-
-# Load the state for a new run
-python3 crispo.py --objective "My second run, building on the first" --load-metaknowledge knowledge.pkl
-```
-
 ## Licensing
 
-`crispo` is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. This means you are free to use, modify, and distribute this software for any open-source project that is also licensed under the AGPLv3.
-
-For use in a closed-source, proprietary, or commercial application, a separate commercial license is required. Please contact us at `crispo.contact@gmail.com` to inquire about obtaining a commercial license.
+`crispo` is licensed under the AGPLv3. For use in a closed-source or commercial application, a separate commercial license is required. Please contact `crispo.contact@gmail.com` for more information.
 
 ## Testing
 
