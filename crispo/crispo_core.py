@@ -9,6 +9,8 @@ import random
 import math
 import re
 import subprocess
+import os
+import resource
 import tempfile
 from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass, field, asdict
@@ -567,18 +569,13 @@ class CodeGenerator:
     to select the most appropriate code template for a given layer.
     """
 
-    def generate(self, params: LayerParameters, layer_id: int, objective: str, trust_parameter: float = 0.8) -> str:
-        """Selects and generates a script for a single layer.
+    def generate(self, objective: str, trust_parameter: float = 0.8) -> str:
+        """Selects and generates a script based on the user's objective.
 
         This method uses keyword matching on the user's objective to select
-        the most logically appropriate template for each layer of the pipeline.
-        If a clear intent cannot be determined, it falls back to a
-        complexity-based selection mechanism.
+        the most logically appropriate template.
 
         Args:
-            params (LayerParameters): The LayerParameters for the current
-                layer, which influence the generated code's specifics.
-            layer_id (int): The ID of the current layer (e.g., 0, 1, 2).
             objective (str): The user's high-level objective string, used for
                 intent detection.
             trust_parameter (float): The trust parameter (lambda) for
@@ -589,34 +586,27 @@ class CodeGenerator:
         """
         objective = objective.lower()
 
+        # NOTE: A dummy LayerParameters object is created here because the templates
+        # still use it for minor variations. In a future refactoring, this
+        # could be replaced by a simpler mechanism.
+        params = LayerParameters(layer_id=0, weights={'execution': 1.0, 'complexity': 0.5}, biases={}, temperature=1.0)
+
         # Check for LAA-specific objectives first
         if "ski rental" in objective:
             return self._generate_ski_rental_laa_template(params, trust_parameter)
         if "one-max search" in objective:
             return self._generate_one_max_laa_template(params, trust_parameter)
 
-        # Layer 0: Prioritize fetching data
-        if layer_id == 0 and any(kw in objective for kw in ['fetch', 'get', 'api', 'request']):
-            return self._generate_api_template(params, layer_id)
+        # Check for standard pipeline steps
+        if any(kw in objective for kw in ['fetch', 'get', 'api', 'request']):
+            return self._generate_api_template(params, 0)
+        if any(kw in objective for kw in ['process', 'transform', 'clean', 'pandas']):
+            return self._generate_transform_template(params, 1)
+        if any(kw in objective for kw in ['analyze', 'numpy', 'compute', 'calculate']):
+            return self._generate_high_complexity_template(params, 2)
 
-        # Layer 1: Prioritize transformation
-        if layer_id == 1 and any(kw in objective for kw in ['process', 'transform', 'clean', 'pandas']):
-            return self._generate_transform_template(params, layer_id)
-
-        # Layer 2: Prioritize analysis
-        if layer_id == 2 and any(kw in objective for kw in ['analyze', 'numpy', 'compute', 'calculate']):
-            return self._generate_high_complexity_template(params, layer_id)
-
-        # Fallback to complexity-based logic if intent is not clear for the layer
-        complexity = params.weights.get('complexity', 1.0)
-        if complexity > 0.8:
-            return self._generate_high_complexity_template(params, layer_id)
-        if complexity > 0.5:
-            return self._generate_transform_template(params, layer_id)
-        if complexity > 0.2:
-            return self._generate_api_template(params, layer_id)
-
-        return self._generate_simple_template(params, layer_id)
+        # Fallback for generic objectives
+        return self._generate_simple_template(params, 0)
 
     def _generate_ski_rental_laa_template(self, params: LayerParameters, trust_parameter: float) -> str:
         """Generates a script for the Ski Rental problem using a learning-augmented algorithm."""
@@ -853,9 +843,10 @@ class Layer{layer_id}System:
 
 if __name__ == '__main__':
     system = Layer{layer_id}System()
-    # Example usage with mock data
-    mock_input_context = {{'data': np.random.rand(1, {len(params.weights)}).tolist()}}
-    result = system.process(mock_input_context)
+    # The 'pipeline_context' variable is injected by the Verifier during pipeline testing.
+    if 'pipeline_context' not in locals():
+        pipeline_context = {{'data': np.random.rand(1, {len(params.weights)}).tolist()}}
+    result = system.process(pipeline_context)
     print(json.dumps(result))
 '''
 
@@ -883,9 +874,10 @@ def process_layer_{layer_id}(input_context):
     return output_context
 
 if __name__ == '__main__':
-    # Example usage with mock data
-    mock_input_context = {{'data': {{'col1': [1, 2, 3], 'col2': [4, 5, 6]}}}}
-    result = process_layer_{layer_id}(mock_input_context)
+    # The 'pipeline_context' variable is injected by the Verifier during pipeline testing.
+    if 'pipeline_context' not in locals():
+        pipeline_context = {{'data': {{'col1': [1, 2, 3], 'col2': [4, 5, 6]}}}}
+    result = process_layer_{layer_id}(pipeline_context)
     print(json.dumps(result))
 '''
 
@@ -906,18 +898,21 @@ import json
 def process_layer_{layer_id}(input_context):
     api_endpoint = input_context.get('api_endpoint', 'https://jsonplaceholder.typicode.com/todos/1')
     try:
-        response = requests.get(api_endpoint, timeout=API_REQUEST_TIMEOUT)
+        response = requests.get(api_endpoint, timeout=5) # Use a hardcoded timeout
         response.raise_for_status()
-        output_context = {{'data': response.json()}}
+        data = response.json()
+        if not isinstance(data, list):
+            data = [data]
+        output_context = {{'data': data}}
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching data: {{e}}")
         output_context = {{'data': [], 'error': str(e)}}
     return output_context
 
 if __name__ == '__main__':
-    # Example usage with a mock API endpoint
-    mock_input_context = {{'api_endpoint': 'https://jsonplaceholder.typicode.com/todos/1'}}
-    result = process_layer_{layer_id}(mock_input_context)
+    # The 'pipeline_context' variable is injected by the Verifier during pipeline testing.
+    if 'pipeline_context' not in locals():
+        pipeline_context = {{'api_endpoint': 'https://jsonplaceholder.typicode.com/todos/1'}}
+    result = process_layer_{layer_id}(pipeline_context)
     print(json.dumps(result))
 '''
 
@@ -943,9 +938,10 @@ def process_layer_{layer_id}(input_context):
     return output_context
 
 if __name__ == '__main__':
-    # Example usage with mock data
-    mock_input_context = {{'data': 10}}
-    result = process_layer_{layer_id}(mock_input_context)
+    # The 'pipeline_context' variable is injected by the Verifier during pipeline testing.
+    if 'pipeline_context' not in locals():
+        pipeline_context = {{'data': 10}}
+    result = process_layer_{layer_id}(pipeline_context)
     print(json.dumps(result))
 '''
 
@@ -1158,70 +1154,80 @@ class OneMaxSearchContext(ProblemContext):
 
 
 class Verifier:
-    """Verifies the correctness of generated code.
+    """Verifies the correctness and resource-safety of generated code.
 
     This class provides methods to check for syntax and runtime errors in
-    both individual scripts and full pipelines.
+    both individual scripts and full pipelines. For security, it runs scripts
+    in a sandboxed subprocess with strict CPU and memory limits to prevent
+    resource exhaustion attacks.
     """
 
-    def verify_script(self, script_code: str) -> Dict[str, float]:
-        """Verifies a single script for syntax and runtime errors.
+    def _set_resource_limits(self):
+        """Sets CPU and memory limits for the current process."""
+        # Set CPU time limit to 2 seconds
+        resource.setrlimit(resource.RLIMIT_CPU, (2, 2))
+        # Set memory limit to 100 MB
+        resource.setrlimit(resource.RLIMIT_AS, (100 * 1024 * 1024, 100 * 1024 * 1024))
 
-        This method first checks for syntax errors by attempting to compile the
-        code. If that succeeds, it saves the code to a temporary file and
-        executes it as a subprocess to check for runtime errors.
+
+    def verify_script(self, script_code: str) -> Dict[str, Any]:
+        """
+        Verifies a single script for syntax and runtime errors in a sandbox.
 
         Args:
             script_code: A string containing the Python code to verify.
 
         Returns:
-            A dictionary containing 'syntax_ok', 'runtime_ok', and
-            'overall_quality' metrics.
+            A dictionary containing verification metrics.
         """
-        metrics = {'syntax_ok': 0.0, 'runtime_ok': 0.0, 'overall_quality': 0.0}
-
-        # 1. Check for syntax errors first
+        metrics: Dict[str, Any] = {'syntax_ok': 0.0, 'runtime_ok': 0.0, 'overall_quality': 0.0}
         try:
             compile(script_code, '<string>', 'exec')
             metrics['syntax_ok'] = 1.0
-        except SyntaxError:
-            return metrics  # No point in trying to run if syntax is wrong
+        except SyntaxError as e:
+            metrics['error'] = f"SyntaxError: {e}"
+            return metrics
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
             temp_file.write(script_code)
             temp_filename = temp_file.name
 
+        preexec_fn = None
+        preexec_fn = self._set_resource_limits if os.name != 'nt' else None
+
         try:
-            # Execute the script as a subprocess
             result = subprocess.run(
                 ['python3', temp_filename],
                 capture_output=True,
                 text=True,
-                timeout=SINGLE_SCRIPT_VERIFICATION_TIMEOUT
+                timeout=SINGLE_SCRIPT_VERIFICATION_TIMEOUT,
+                preexec_fn=preexec_fn,
+                check=False  # Do not raise exception on non-zero exit codes
             )
-
-            # A non-zero return code indicates a runtime error
             if result.returncode == 0:
                 metrics['runtime_ok'] = 1.0
-
-        except FileNotFoundError:
-            # This can happen if the python3 interpreter is not found
-            print("Error: python3 interpreter not found.")
+            else:
+                # Capture stderr to understand why it failed. If stderr is empty,
+                # it's likely the process was terminated by a signal (e.g., CPU limit).
+                error_msg = result.stderr.strip()
+                if not error_msg:
+                    error_msg = f"Process terminated with non-zero exit code {result.returncode} (possible resource limit exceeded)."
+                metrics['error'] = error_msg
 
         except subprocess.TimeoutExpired:
-            print(f"Verification timeout for script: {temp_filename}")
-
+            metrics['runtime_ok'] = 0.0
+            metrics['error'] = "TimeoutExpired"
+        except Exception as e:
+            metrics['runtime_ok'] = 0.0
+            metrics['error'] = str(e)
         finally:
-            # Clean up the temporary file
-            import os
-            os.remove(temp_filename)
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
 
-        # Calculate overall quality
         metrics['overall_quality'] = (metrics['syntax_ok'] + metrics['runtime_ok']) / 2.0
-
         return metrics
 
-    def verify_pipeline(self, script_codes: List[str]) -> Dict[str, float]:
+    def verify_pipeline(self, script_codes: List[str]) -> Dict[str, Any]:
         """Verifies a full pipeline of scripts.
 
         This method executes a list of scripts sequentially, passing the JSON
@@ -1233,17 +1239,18 @@ class Verifier:
                 self-contained Python script.
 
         Returns:
-            A dictionary containing the 'overall_quality' of the pipeline,
-            which is the proportion of scripts that executed successfully.
+            A dictionary containing the 'overall_quality' of the pipeline and
+            the final 'output' context after the last successful script execution.
         """
-        pipeline_context = {}
+        pipeline_context: Dict[str, Any] = {}
         total_quality = 0.0
         num_scripts = len(script_codes)
 
         for i, script_code in enumerate(script_codes):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
-                # Inject the input context into the script
-                injected_code = f"import json\npipeline_context = {json.dumps(pipeline_context)}\n" + script_code
+            # Using repr() is safer than json.dumps() for injecting the context dict.
+            # We also inject numpy for the high-complexity template's default context.
+            injected_code = f"import json\nimport numpy as np\npipeline_context = {repr(pipeline_context)}\n" + script_code
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as temp_file:
                 temp_file.write(injected_code)
                 temp_filename = temp_file.name
 
@@ -1252,24 +1259,27 @@ class Verifier:
                     ['python3', temp_filename],
                     capture_output=True,
                     text=True,
-                    timeout=PIPELINE_VERIFICATION_TIMEOUT
+                    timeout=PIPELINE_VERIFICATION_TIMEOUT,
+                    check=False
                 )
 
-                if result.returncode == 0:
+                if result.returncode == 0 and result.stdout:
                     total_quality += 1.0
-                    # Parse the output to get the next context
                     pipeline_context = json.loads(result.stdout)
                 else:
-                    # Stop the pipeline on the first failure
-                    print(f"Pipeline failed at layer {i}.")
+                    print(f"Pipeline failed at layer {i}. Stderr: {result.stderr}")
+                    pipeline_context = {'error': result.stderr.strip()}
                     break
-
+            except json.JSONDecodeError:
+                print(f"Pipeline failed at layer {i} due to invalid JSON output: {result.stdout}")
+                pipeline_context = {'error': 'Invalid JSON output'}
+                break
             finally:
-                import os
-                os.remove(temp_filename)
+                if os.path.exists(temp_filename):
+                    os.remove(temp_filename)
 
         final_quality = total_quality / num_scripts if num_scripts > 0 else 0.0
-        return {'overall_quality': final_quality}
+        return {'overall_quality': final_quality, 'output': pipeline_context}
 
     def evaluate_learning_augmented_algorithm(
         self,
