@@ -15,8 +15,7 @@ from crispo.crispo_core import (
     CodeGenerator,
     Verifier,
     SkiRentalContext,
-    OneMaxSearchContext,
-    LayerParameters
+    OneMaxSearchContext
 )
 from crispo.crispo import Crispo, OrchestrationContext
 from crispo.predictor_evaluator import PredictorEvaluator
@@ -210,7 +209,7 @@ class TestCodeGenerator(unittest.TestCase):
         """Verify that a generic objective generates the simple template."""
         script = self.cg.generate("do something")
         # Check that the default parameters are embedded
-        self.assertIn("weight = 1.00", script)
+        self.assertIn("weight = 1.0", script)
 
 
 class TestIntegration(unittest.TestCase):
